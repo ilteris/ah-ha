@@ -94,7 +94,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       textContent: snippetData.content, // Ensure field names match what saveSnippet expects
       sourceUrl: snippetData.permalink_to_origin,
       title: snippetData.title,
-      tags: snippetData.tags,
+      notes: snippetData.notes, // Changed from tags to notes
       // context: snippetData.original_context // If you pass this
     })
       .then((result) => {
@@ -654,12 +654,12 @@ async function saveSnippet(snippetData) {
       snippetData.textContent.substring(0, 70) +
       (snippetData.textContent.length > 70 ? "..." : ""); // Generate a title from content
     const payload = {
-      title: defaultTitle, // Added title
+      title: snippetData.title || defaultTitle, // Use UI title or generate from content
       content: snippetData.textContent,
       permalink_to_origin: snippetData.sourceUrl,
+      notes: snippetData.notes, // Added notes from capture UI
       // context: snippetData.context, // Optional: if you send full page context
       // id_token: idToken // Optional: if your backend validates the id_token with Google
-      // tags: [], // Optional: if your backend expects tags and you want to send a default
     };
     console.log("Sending payload to API:", JSON.stringify(payload));
     console.log(

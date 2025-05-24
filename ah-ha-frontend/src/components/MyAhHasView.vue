@@ -19,6 +19,14 @@
         {{ isLoading ? "Refreshing..." : "Refresh All" }}
       </button>
     </div>
+
+    <div v-if="allUniqueTags.length" class="all-tags-container">
+      <h4>All Tags:</h4>
+      <span v-for="tag in allUniqueTags" :key="tag" class="tag all-tag-item">{{
+        tag
+      }}</span>
+    </div>
+
     <div v-if="isLoading && !ahHaItems.length" class="loading-message">
       Loading Ah-ha moments...
     </div>
@@ -32,8 +40,13 @@
       <li v-for="item in ahHaItems" :key="item.id" class="ah-ha-item-card">
         <h3>{{ item.title }}</h3>
         <p class="snippet-content">"{{ item.content }}"</p>
-        <div class="tags" v-if="item.tags && item.tags.length">
-          <span v-for="tag in item.tags" :key="tag" class="tag">{{ tag }}</span>
+        <div
+          class="tags"
+          v-if="item.generated_tags && item.generated_tags.length"
+        >
+          <span v-for="tag in item.generated_tags" :key="tag" class="tag">{{
+            tag
+          }}</span>
         </div>
         <p class="timestamp">{{ formatTimestamp(item.timestamp) }}</p>
         <button
@@ -49,12 +62,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 
 interface AhHaItem {
   id: number;
   title: string;
-  tags: string[] | null;
+  generated_tags: string[] | null; // Changed from 'tags' to 'generated_tags'
   content: string;
   timestamp: string; // Assuming ISO string from backend
   original_context?: string | null;
@@ -113,6 +126,16 @@ const formatTimestamp = (isoString: string) => {
 onMounted(() => {
   fetchAhHas(true); // Fetch all on initial load
 });
+
+const allUniqueTags = computed(() => {
+  const tagsSet = new Set<string>();
+  ahHaItems.value.forEach((item) => {
+    if (item.generated_tags) {
+      item.generated_tags.forEach((tag) => tagsSet.add(tag));
+    }
+  });
+  return Array.from(tagsSet).sort();
+});
 </script>
 
 <style scoped lang="scss">
@@ -128,6 +151,36 @@ onMounted(() => {
     margin-bottom: 20px;
     color: #333;
     text-align: center;
+  }
+}
+
+.all-tags-container {
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+
+  h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+  }
+
+  .all-tag-item {
+    display: inline-block;
+    background-color: #007bff;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    cursor: default; // Or make them clickable for filtering later
+
+    &:hover {
+      background-color: #0056b3;
+    }
   }
 }
 

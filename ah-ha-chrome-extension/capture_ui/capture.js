@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const titleInput = document.getElementById("snippet-title");
   const contentTextarea = document.getElementById("snippet-content");
-  const tagsInput = document.getElementById("snippet-tags");
+  const notesTextarea = document.getElementById("snippet-notes"); // Added for notes
   const urlInput = document.getElementById("snippet-url"); // Hidden, but we'll store URL here
   const saveButton = document.getElementById("save-button");
   const cancelButton = document.getElementById("cancel-button");
@@ -48,15 +48,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   saveButton.addEventListener("click", () => {
-    const tagsArray = tagsInput.value
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter((tag) => tag !== "");
+    // Removed tagsArray logic
 
     const snippetData = {
       title: titleInput.value.trim(),
       content: contentTextarea.value.trim(),
-      tags: tagsArray,
+      notes: notesTextarea.value.trim(), // Added notes
       permalink_to_origin: urlInput.value, // Get from the hidden input
       // original_context: initialData ? initialData.context : '', // If you pass full context
     };

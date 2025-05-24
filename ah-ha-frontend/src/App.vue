@@ -28,17 +28,18 @@ const handleSaveAhHa = async (ahHaData: {
 }) => {
   // console.log("Ah-ha to save:", ahHaData);
   try {
-    const response = await fetch("http://localhost:8010/ah-has/", {
+    const response = await fetch("http://localhost:8010/api/v1/snippets/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         title: ahHaData.title,
-        tags: ahHaData.tags,
-        content: ahHaData.snippet, // Renaming snippet to content for backend
-        original_context: ahHaData.context,
+        generated_tags: ahHaData.tags, // Align with backend model, will be overwritten by AI if enabled
+        content: ahHaData.snippet,
+        permalink_to_origin: ahHaData.context, // Align with backend model
         // timestamp will be set by backend
+        // notes field is also available in backend if needed
       }),
     });
 

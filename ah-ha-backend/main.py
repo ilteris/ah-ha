@@ -1,12 +1,17 @@
 import datetime
+import os  # Added for API Key
 from typing import List, Optional
 
+import google.generativeai as genai  # Added for Gemini
 import uvicorn
+from dotenv import load_dotenv  # Added for .env file
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 app = FastAPI()
+
+load_dotenv()  # Load environment variables from .env file
 
 # CORS configuration
 origins = [
@@ -27,6 +32,15 @@ app.add_middleware(
 # In-memory storage for Ah-ha moments
 ah_ha_storage = []
 next_id = 1
+
+# Configure Gemini API
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print(
+        "WARNING: GEMINI_API_KEY environment variable not set. AI tag generation will be disabled."
+    )
 
 # Stop words list (can be expanded)
 STOP_WORDS = set(
@@ -162,10 +176,11 @@ class SnippetText(BaseModel):
 class AhHaSnippet(BaseModel):
     id: Optional[int] = None
     title: str
-    tags: Optional[List[str]] = None
     content: str
+    permalink_to_origin: Optional[str] = None  # Renamed from original_context
+    notes: Optional[str] = None  # Added for user notes
+    generated_tags: Optional[List[str]] = None  # Added for AI-generated tags
     timestamp: Optional[datetime.datetime] = None
-    original_context: Optional[str] = None  # For simplicity, context is also a string
 
 
 @app.post("/api/v1/snippets", response_model=AhHaSnippet)  # Changed path here
@@ -174,6 +189,37 @@ async def create_ah_ha(snippet: AhHaSnippet):
     snippet.id = next_id
     next_id += 1
     snippet.timestamp = datetime.datetime.now()
+
+    # Generate tags with Gemini
+    print(f"Attempting to generate tags for: '{snippet.title}'")
+    if GEMINI_API_KEY and snippet.content:
+        print(
+            "GEMINI_API_KEY found and snippet content exists. Proceeding with tag generation."
+        )
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash-latest")
+            prompt = f'Suggest 3-5 relevant tags for the following text. Output them as a comma-separated list. Text: "{snippet.title} - {snippet.content}"'
+            print(f"Gemini Prompt: {prompt}")
+            response = await model.generate_content_async(prompt)
+            print(f"Gemini Raw Response: {response.text}")
+            if response.text:
+                raw_tags = response.text.split(",")
+                parsed_tags = [tag.strip().lower() for tag in raw_tags if tag.strip()]
+                snippet.generated_tags = parsed_tags
+                print(f"Parsed Tags: {snippet.generated_tags}")
+            else:
+                print("Gemini response was empty. No tags generated.")
+                snippet.generated_tags = []
+        except Exception as e:
+            print(f"ERROR generating tags with Gemini: {e}")
+            snippet.generated_tags = []  # Default to empty list on error
+    else:
+        if not GEMINI_API_KEY:
+            print("GEMINI_API_KEY not found. Skipping AI tag generation.")
+        if not snippet.content:
+            print("Snippet content is empty. Skipping AI tag generation.")
+        snippet.generated_tags = []
+
     ah_ha_storage.append(snippet)
     return snippet
 
@@ -186,8 +232,12 @@ async def get_ah_has(search: Optional[str] = None):
             s
             for s in ah_ha_storage
             if search_lower in s.title.lower()
-            or (s.tags and any(search_lower in tag.lower() for tag in s.tags))
+            or (
+                s.generated_tags
+                and any(search_lower in tag.lower() for tag in s.generated_tags)
+            )  # Search in generated_tags
             or search_lower in s.content.lower()
+            or (s.notes and search_lower in s.notes.lower())  # Search in notes
         ]
     return sorted(ah_ha_storage, key=lambda x: x.timestamp, reverse=True)
 
