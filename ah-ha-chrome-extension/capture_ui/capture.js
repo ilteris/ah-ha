@@ -33,10 +33,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (encodedData) {
     try {
-      const decodedData = JSON.parse(decodeURIComponent(encodedData));
+      console.log("Encoded data from URL:", encodedData);
+      const decodedString = decodeURIComponent(encodedData);
+      console.log("Decoded string:", decodedString);
+      const decodedData = JSON.parse(decodedString);
+      console.log("Parsed data:", decodedData);
       populateForm(decodedData);
     } catch (e) {
       console.error("Error parsing initial data from URL:", e);
+      console.error("Encoded data that failed was:", encodedData);
+      if (typeof decodedString !== "undefined") {
+        console.error(
+          "Decoded string that failed to parse was:",
+          decodedString
+        );
+      }
       // Fallback or error display
       titleInput.value = "Error loading data";
       contentTextarea.value = "Could not load snippet content.";

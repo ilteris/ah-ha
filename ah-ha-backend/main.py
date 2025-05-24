@@ -1,221 +1,152 @@
 import datetime
-import os  # Added for API Key
+import os
 from typing import List, Optional
 
-import google.generativeai as genai  # Added for Gemini
+import config
 import uvicorn
-from dotenv import load_dotenv  # Added for .env file
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from google.genai import types as genai_types
+from models import AhHaSnippet, SnippetText
+from services.adk_service import get_adk_runner, get_tagging_agent
 
 app = FastAPI()
 
-load_dotenv()  # Load environment variables from .env file
-
-# CORS configuration
-origins = [
-    "http://localhost",  # Common for local dev
-    "http://localhost:5173",  # Default Vite dev server port
-    "http://127.0.0.1:5173",  # Also common for Vite
-    # Add any other origins if your frontend runs on a different port/domain
-]
+adk_runner = get_adk_runner()
+tagging_agent = get_tagging_agent()  # This is the LlmAgent from adk_service.py
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=config.ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory storage for Ah-ha moments
 ah_ha_storage = []
 next_id = 1
 
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-else:
-    print(
-        "WARNING: GEMINI_API_KEY environment variable not set. AI tag generation will be disabled."
-    )
 
-# Stop words list (can be expanded)
-STOP_WORDS = set(
-    [
-        "a",
-        "an",
-        "the",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "being",
-        "have",
-        "has",
-        "had",
-        "do",
-        "does",
-        "did",
-        "will",
-        "would",
-        "should",
-        "can",
-        "could",
-        "may",
-        "might",
-        "must",
-        "and",
-        "but",
-        "or",
-        "nor",
-        "for",
-        "so",
-        "yet",
-        "if",
-        "then",
-        "else",
-        "when",
-        "where",
-        "why",
-        "how",
-        "what",
-        "which",
-        "who",
-        "whom",
-        "whose",
-        "this",
-        "that",
-        "these",
-        "those",
-        "i",
-        "you",
-        "he",
-        "she",
-        "it",
-        "we",
-        "they",
-        "me",
-        "him",
-        "her",
-        "us",
-        "them",
-        "my",
-        "your",
-        "his",
-        "its",
-        "our",
-        "their",
-        "mine",
-        "yours",
-        "hers",
-        "ours",
-        "theirs",
-        "to",
-        "of",
-        "in",
-        "on",
-        "at",
-        "by",
-        "from",
-        "with",
-        "about",
-        "above",
-        "after",
-        "again",
-        "against",
-        "all",
-        "am",
-        "as",
-        "any",
-        "around",
-        "because",
-        "before",
-        "below",
-        "between",
-        "both",
-        "during",
-        "each",
-        "few",
-        "further",
-        "here",
-        "into",
-        "just",
-        "no",
-        "not",
-        "now",
-        "once",
-        "only",
-        "other",
-        "out",
-        "over",
-        "own",
-        "same",
-        "some",
-        "such",
-        "than",
-        "too",
-        "under",
-        "until",
-        "up",
-        "very",
-        "while",
-        "through",
-    ]
-)
-
-
-class SnippetText(BaseModel):
-    snippet: str
-
-
-class AhHaSnippet(BaseModel):
-    id: Optional[int] = None
-    title: str
-    content: str
-    permalink_to_origin: Optional[str] = None  # Renamed from original_context
-    notes: Optional[str] = None  # Added for user notes
-    generated_tags: Optional[List[str]] = None  # Added for AI-generated tags
-    timestamp: Optional[datetime.datetime] = None
-
-
-@app.post("/api/v1/snippets", response_model=AhHaSnippet)  # Changed path here
+@app.post("/api/v1/snippets", response_model=AhHaSnippet)
 async def create_ah_ha(snippet: AhHaSnippet):
     global next_id
     snippet.id = next_id
     next_id += 1
     snippet.timestamp = datetime.datetime.now()
 
-    # Generate tags with Gemini
-    print(f"Attempting to generate tags for: '{snippet.title}'")
-    if GEMINI_API_KEY and snippet.content:
+    print(f"Attempting to generate tags for: '{snippet.title}' using LlmAgent")
+
+    if adk_runner and tagging_agent and snippet.content:
         print(
-            "GEMINI_API_KEY found and snippet content exists. Proceeding with tag generation."
+            "ADK LlmAgent and Runner are available. Proceeding with direct tag generation."
         )
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash-latest")
-            prompt = f'Suggest 3-5 relevant tags for the following text. Output them as a comma-separated list. Text: "{snippet.title} - {snippet.content}"'
-            print(f"Gemini Prompt: {prompt}")
-            response = await model.generate_content_async(prompt)
-            print(f"Gemini Raw Response: {response.text}")
-            if response.text:
-                raw_tags = response.text.split(",")
-                parsed_tags = [tag.strip().lower() for tag in raw_tags if tag.strip()]
-                snippet.generated_tags = parsed_tags
-                print(f"Parsed Tags: {snippet.generated_tags}")
+            user_prompt = f'Title: "{snippet.title}"\nContent: "{snippet.content}"'
+            input_message = genai_types.Content(
+                role="user", parts=[genai_types.Part(text=user_prompt)]
+            )
+
+            user_id = f"user_snippet_{snippet.id if snippet.id else 'new'}"
+            session_id_for_adk = (
+                f"session_tagging_{snippet.id if snippet.id else os.urandom(8).hex()}"
+            )
+
+            current_session = await adk_runner.session_service.get_session(
+                app_name=adk_runner.app_name,
+                user_id=user_id,
+                session_id=session_id_for_adk,
+            )
+            if not current_session:
+                await adk_runner.session_service.create_session(
+                    app_name=adk_runner.app_name,
+                    user_id=user_id,
+                    session_id=session_id_for_adk,
+                )
+
+            print(f"ADK Prompt for {session_id_for_adk} (to LlmAgent): {user_prompt}")
+
+            final_tags_text = None
+            parsed_tags_list = []
+
+            print(f"\n--- ADK Event Stream for {session_id_for_adk} (LlmAgent) ---")
+            event_count = 0
+            async for event in adk_runner.run_async(
+                user_id=user_id,
+                session_id=session_id_for_adk,
+                new_message=input_message,
+            ):
+                event_count += 1
+                print(
+                    f"\n[EVENT {event_count}] ID: {event.id}, Author: {event.author}, Invocation ID: {event.invocation_id}"
+                )
+                if event.content and event.content.parts:
+                    for i, part in enumerate(event.content.parts):
+                        print(f"  Part {i}:")
+                        if part.text:
+                            print(
+                                f"    Text: '{part.text[:200]}...' (Partial: {event.partial})"
+                            )
+                            # If it's the final text from the LlmAgent, capture it
+                            if event.is_final_response() and not event.partial:
+                                final_tags_text = part.text.strip()
+
+                if event.actions:  # Should be minimal for direct LlmAgent
+                    print(
+                        f"  Actions: state_delta={event.actions.state_delta}, artifact_delta={event.actions.artifact_delta}, transfer={event.actions.transfer_to_agent}, escalate={event.actions.escalate}"
+                    )
+
+                if event.is_final_response():
+                    print(f"[EVENT {event_count}] This is a final response event.")
+                    if (
+                        final_tags_text is not None
+                    ):  # Check if final_tags_text is not None
+                        print(f"  Final text from LlmAgent: '{final_tags_text}'")
+                        raw_tags = final_tags_text.split(",")
+                        parsed_tags_list = [
+                            tag.strip().lower() for tag in raw_tags if tag.strip()
+                        ]
+                        if parsed_tags_list:
+                            print(
+                                f"  Tags parsed from LlmAgent direct output: {parsed_tags_list}"
+                            )
+                        else:
+                            print(
+                                f"  Could not parse tags from LlmAgent direct output: '{final_tags_text}'"
+                            )
+                    elif (
+                        event.content
+                        and event.content.parts
+                        and any(  # Ensure event.content.parts is also checked
+                            p.text for p in event.content.parts if p.text
+                        )
+                    ):  # Check if final event has text not captured
+                        temp_final_text = "".join(
+                            [p.text for p in event.content.parts if p.text]
+                        ).strip()
+                        print(
+                            f"  Final event had text, but not captured in final_tags_text. Text: '{temp_final_text}'"
+                        )
+                    else:
+                        print(
+                            "  No final text content from LlmAgent in this event to parse for tags."
+                        )
+
+            print(
+                f"--- End ADK Event Stream for {session_id_for_adk} (Total Events: {event_count}) ---\n"
+            )
+
+            if parsed_tags_list:
+                snippet.generated_tags = parsed_tags_list
+                print(f"Final Parsed Tags from LlmAgent: {snippet.generated_tags}")
             else:
-                print("Gemini response was empty. No tags generated.")
+                print("ADK LlmAgent response did not yield parseable tags.")
                 snippet.generated_tags = []
         except Exception as e:
-            print(f"ERROR generating tags with Gemini: {e}")
-            snippet.generated_tags = []  # Default to empty list on error
+            print(f"ERROR generating tags with ADK LlmAgent: {e}")
+            snippet.generated_tags = []
     else:
-        if not GEMINI_API_KEY:
-            print("GEMINI_API_KEY not found. Skipping AI tag generation.")
+        if not adk_runner or not tagging_agent:
+            print("ADK LlmAgent or Runner not available. Skipping AI tag generation.")
         if not snippet.content:
             print("Snippet content is empty. Skipping AI tag generation.")
         snippet.generated_tags = []
@@ -235,9 +166,9 @@ async def get_ah_has(search: Optional[str] = None):
             or (
                 s.generated_tags
                 and any(search_lower in tag.lower() for tag in s.generated_tags)
-            )  # Search in generated_tags
+            )
             or search_lower in s.content.lower()
-            or (s.notes and search_lower in s.notes.lower())  # Search in notes
+            or (s.notes and search_lower in s.notes.lower())
         ]
     return sorted(ah_ha_storage, key=lambda x: x.timestamp, reverse=True)
 
@@ -247,12 +178,9 @@ async def get_ah_ha_by_id(ah_ha_id: int):
     for s in ah_ha_storage:
         if s.id == ah_ha_id:
             return s
-    return {
-        "error": "Ah-ha not found"
-    }  # This will cause a validation error, ideally use HTTPException
+    return {"error": "Ah-ha not found"}
 
 
-# Mocked chat data for the demo
 mock_chat_log = [
     {
         "id": 1,
@@ -309,30 +237,22 @@ async def get_mock_chat():
 
 @app.post("/suggest-tags/")
 async def suggest_tags(request: SnippetText):
-    snippet = request.snippet
-    if not snippet or len(snippet.split()) < 3:  # Basic check for very short snippets
+    snippet_text = request.snippet
+    if not snippet_text or len(snippet_text.split()) < 3:
         return {"suggested_tags": []}
 
-    # 1. Lowercase
-    text = snippet.lower()
-
-    # 2. Remove punctuation (simple replacement)
+    text = snippet_text.lower()
     import re
 
-    text = re.sub(r"[^\w\s]", "", text)  # Keep words and spaces
-
-    # 3. Tokenize
+    text = re.sub(r"[^\w\s]", "", text)
     words = text.split()
-
-    # 4. Filter stop words and short words
     min_word_length = 3
     keywords = [
         word
         for word in words
-        if word not in STOP_WORDS and len(word) >= min_word_length
+        if word not in config.STOP_WORDS and len(word) >= min_word_length
     ]
 
-    # 5. Frequency count and select top N unique words
     from collections import Counter
 
     if not keywords:
@@ -340,14 +260,12 @@ async def suggest_tags(request: SnippetText):
 
     word_counts = Counter(keywords)
     top_n = 7
-    # Get unique tags, preserving order of most common
     suggested_tags = []
     for word, _ in word_counts.most_common():
         if len(suggested_tags) < top_n:
             suggested_tags.append(word)
         else:
             break
-
     return {"suggested_tags": suggested_tags}
 
 

@@ -1,5 +1,11 @@
 fastapi
 uvicorn[standard]
 pydantic
-google-generativeai==0.7.1 # Pinning to a recent version
+google-generativeai # Allowing latest version to align with genai.Client() usage
 python-dotenv
+google-auth
+google-auth-oauthlib
+python-jose[cryptography]
+google-cloud-firestore
+passlib[bcrypt]
+google-adk
