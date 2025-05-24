@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capture Ah-Ha!</title>
+    <link rel="stylesheet" href="capture.css">
+</head>
+
+<body>
+    <div class="container">
+        <h2>Save New Ah-Ha!</h2>
+
+        <div class="form-group">
+            <label for="snippet-title">Title:</label>
+            <input type="text" id="snippet-title" name="snippet-title">
+        </div>
+
+        <div class="form-group">
+            <label for="snippet-content">Content:</label>
+            <textarea id="snippet-content" name="snippet-content" rows="8"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="snippet-tags">Tags (comma-separated):</label>
+            <input type="text" id="snippet-tags" name="snippet-tags">
+        </div>
+
+        <div class="form-group" style="display: none;"> <!-- Hidden for now, populated by JS -->
+            <label for="snippet-url">Source URL:</label>
+            <input type="text" id="snippet-url" name="snippet-url" readonly>
+        </div>
+
+        <div class="actions">
+            <button id="save-button" type="button">Save Snippet</button>
+            <button id="cancel-button" type="button">Cancel</button>
+        </div>
+    </div>
+    <script src="capture.js"></script>
+</body>
+
+</html>

@@ -8,7 +8,8 @@
     "storage",
     "scripting",
     "contextMenus",
-    "identity"
+    "identity",
+    "notifications"
   ],
   "action": {
     "default_popup": "popup/popup.html",

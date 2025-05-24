@@ -4,6 +4,9 @@
 const AH_HA_API_BASE_URL = "http://localhost:8010/api/v1"; // Replace with your actual backend API URL
 const CONTEXT_MENU_ID = "AH_HA_CAPTURE_CONTEXT_MENU";
 
+let currentAuthToken = null;
+let currentUserLoggedIn = false; // In-memory flag for immediate state
+
 // --- OAuth 2.0 Configuration (Replace with your actual provider details) ---
 const OAUTH_CLIENT_ID =
   "36070612387-nib9a64uruobemn3hicj5oio9k3t5sdb.apps.googleusercontent.com";
@@ -47,8 +50,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "LOGOUT") {
     // Clear stored tokens and simulated login flag
     chrome.storage.local.remove(
-      ["authToken", "ahHaUserLoggedIn", "refreshToken"],
+      [
+        "authToken",
+        "idToken",
+        "tokenExpiryTime",
+        "ahHaUserLoggedIn",
+        "refreshToken",
+        "oauthNonce",
+      ], // Clear nonce too
       () => {
+        currentAuthToken = null; // Clear in-memory token
+        currentUserLoggedIn = false; // Clear in-memory flag
         if (chrome.runtime.lastError) {
           console.error(
             "Error clearing tokens on logout:",
@@ -74,9 +86,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sourceUrl: url,
       context: content,
     }); // Added context
-    sendResponse({ status: "Snippet capture initiated." });
+    sendResponse({ status: "Snippet capture initiated." }); // This case might become obsolete or change
+  } else if (request.type === "SAVE_ENRICHED_SNIPPET") {
+    const snippetData = request.payload;
+    console.log("Received enriched snippet data from capture UI:", snippetData);
+    saveSnippet({
+      textContent: snippetData.content, // Ensure field names match what saveSnippet expects
+      sourceUrl: snippetData.permalink_to_origin,
+      title: snippetData.title,
+      tags: snippetData.tags,
+      // context: snippetData.original_context // If you pass this
+    })
+      .then((result) => {
+        sendResponse({ status: "success", data: result });
+        // Optionally send a desktop notification for success from background
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icons/icon48.png",
+          title: "Ah-Ha! Capture",
+          message: "Snippet saved successfully!",
+          priority: 2, // Max priority
+          requireInteraction: true, // Keep notification until user interacts
+        });
+      })
+      .catch((error) => {
+        console.error("Error saving enriched snippet:", error);
+        sendResponse({ status: "error", error: error.message });
+        // Optionally send a desktop notification for error from background
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icons/icon48.png",
+          title: "Ah-Ha! Capture Error",
+          message: `Failed to save snippet: ${error.message}`,
+        });
+      });
+    return true; // Indicates asynchronous response
   }
-  // Return true if you intend to send a response asynchronously
+  // Return true if you intend to send a response asynchronously for other types
   // return true;
 });
 
@@ -123,53 +169,112 @@ async function handleContextMenuClick(info, tab) {
 
   console.log(`Selected text: "${selectionText}" from URL: ${pageUrl}`);
 
-  // For MVP, we'll directly try to save.
-  // Later, we might show a popup/modal from content script or open a small capture window.
-  try {
-    // We need to get the full page content for context if desired,
-    // or just send the selection. For now, just selection and URL.
-    // To get more context, we'd need to message the content script.
-    // This is simplified for now.
-    await saveSnippet({ textContent: selectionText, sourceUrl: pageUrl });
-    // Optionally, send a notification to the user upon successful save
-    chrome.notifications.create({
-      type: "basic",
-      iconUrl: "icons/icon48.png", // Ensure you have this icon
-      title: "Ah-Ha! Capture",
-      message: "Snippet saved successfully!",
-    });
-  } catch (error) {
-    console.error("Failed to save snippet:", error);
-    chrome.notifications.create({
-      type: "basic",
-      iconUrl: "icons/icon48.png",
-      title: "Ah-Ha! Capture Error",
-      message: `Failed to save snippet: ${error.message}`,
-    });
-  }
+  // Instead of saving directly, open the capture UI
+  const captureUiUrl = chrome.runtime.getURL("capture_ui/capture.html");
+
+  // Prepare data to pass to the capture UI
+  const initialData = {
+    textContent: selectionText,
+    sourceUrl: pageUrl,
+    title:
+      selectionText.substring(0, 70) + (selectionText.length > 70 ? "..." : ""), // Auto-generate initial title
+    // context: info.frameUrl || tab.url // Or more detailed context if needed
+  };
+
+  const encodedData = encodeURIComponent(JSON.stringify(initialData));
+  const urlWithParams = `${captureUiUrl}?data=${encodedData}`;
+
+  // Open a new window for the capture UI
+  chrome.windows.create(
+    {
+      url: urlWithParams,
+      type: "popup", // 'popup' or 'panel' are common for this
+      width: 450, // Adjust size as needed
+      height: 550, // Adjust size as needed
+      focused: true,
+    },
+    (window) => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "Error opening capture UI window:",
+          chrome.runtime.lastError.message
+        );
+        // Fallback or error notification if window creation fails
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icons/icon48.png",
+          title: "Ah-Ha! Capture Error",
+          message: "Could not open capture dialog.",
+        });
+      } else {
+        console.log("Capture UI window opened:", window.id);
+      }
+    }
+  );
 }
 
 // Function to check authentication status (checks for a stored token)
 async function checkAuthenticationStatus() {
+  console.log(
+    "checkAuthenticationStatus: Initial in-memory: currentUserLoggedIn=",
+    currentUserLoggedIn,
+    ", currentAuthToken=",
+    !!currentAuthToken
+  );
+
+  // Prioritize in-memory state for immediate checks post-login/logout
+  if (currentUserLoggedIn && currentAuthToken) {
+    console.log(
+      "checkAuthenticationStatus: Using current in-memory state - Logged In."
+    );
+    return true;
+  }
+
+  // If in-memory suggests logged out, or if token is missing, check storage
   try {
-    // In a real OAuth flow, you'd store an access token.
-    // For now, we'll keep the ahHaUserLoggedIn flag for simplicity until token handling is complete.
-    // Later, this will check for a valid (non-expired) access token.
-    const result = await chrome.storage.local.get([
+    console.log(
+      "checkAuthenticationStatus: In-memory state not conclusive or token missing, querying chrome.storage.local..."
+    );
+    const storageResult = await chrome.storage.local.get([
       "authToken",
       "ahHaUserLoggedIn",
     ]);
+    console.log("checkAuthenticationStatus: Data from storage:", storageResult);
+
+    const tokenFromStorage = storageResult.authToken;
+    const flagFromStorage = storageResult.ahHaUserLoggedIn;
+
+    if (tokenFromStorage) {
+      console.log(
+        "checkAuthenticationStatus: authToken found in storage. Updating in-memory state."
+      );
+      currentAuthToken = tokenFromStorage;
+      currentUserLoggedIn = true;
+      return true;
+    }
+
+    if (flagFromStorage) {
+      console.log(
+        "checkAuthenticationStatus: ahHaUserLoggedIn flag found in storage (authToken was not). Considering logged in for now."
+      );
+      currentUserLoggedIn = true;
+      return true;
+    }
+
     console.log(
-      "Auth status check from storage (authToken, ahHaUserLoggedIn):",
-      result
+      "checkAuthenticationStatus: No conclusive auth state in storage. Ensuring in-memory is logged out."
     );
-    return !!result.authToken || !!result.ahHaUserLoggedIn; // Consider user logged in if either a token or the flag exists
+    currentAuthToken = null;
+    currentUserLoggedIn = false;
+    return false;
   } catch (error) {
     console.error(
-      "Error reading auth status from chrome.storage.local:",
+      "checkAuthenticationStatus: Error reading from chrome.storage.local:",
       error
     );
-    return false; // Default to false on error
+    currentAuthToken = null;
+    currentUserLoggedIn = false;
+    return false;
   }
 }
 
@@ -218,8 +323,7 @@ function initiateOAuthFlow(sendResponseToPopup) {
         interactive: true,
       });
 
-      // Always try to clear the stored nonce once the flow completes or fails
-      await clearOauthNonce();
+      // DO NOT clear nonce yet. We need it for verification.
 
       if (chrome.runtime.lastError || !redirectUrl) {
         console.error(
@@ -228,6 +332,7 @@ function initiateOAuthFlow(sendResponseToPopup) {
             ? chrome.runtime.lastError.message
             : "No redirect URL received."
         );
+        await clearOauthNonce(); // Clear nonce if flow failed before verification attempt
         await chrome.storage.local.set({
           ahHaUserLoggedIn: false,
           authToken: null,
@@ -257,12 +362,15 @@ function initiateOAuthFlow(sendResponseToPopup) {
 
       if (!storedNonce) {
         console.error("Stored nonce not found. Cannot verify ID token nonce.");
+        await clearOauthNonce(); // Clear if it somehow still exists
         await chrome.storage.local.set({
           ahHaUserLoggedIn: false,
           authToken: null,
           idToken: null,
           tokenExpiryTime: null,
         });
+        currentUserLoggedIn = false;
+        currentAuthToken = null; // Update in-memory state
         sendResponseToPopup({
           status: "OAuth flow failed: Nonce verification setup error.",
         });
@@ -280,13 +388,15 @@ function initiateOAuthFlow(sendResponseToPopup) {
                 "Stored Nonce:",
                 storedNonce
               );
-              // Handle nonce mismatch error - this is a security risk
+              await clearOauthNonce(); // Clear nonce after attempting verification
               await chrome.storage.local.set({
                 ahHaUserLoggedIn: false,
                 authToken: null,
                 idToken: null,
                 tokenExpiryTime: null,
               });
+              currentUserLoggedIn = false;
+              currentAuthToken = null; // Update in-memory state
               sendResponseToPopup({
                 status:
                   "OAuth flow failed: Nonce mismatch. Security check failed.",
@@ -298,13 +408,15 @@ function initiateOAuthFlow(sendResponseToPopup) {
             console.warn(
               "Nonce claim not found in ID token or ID token is invalid."
             );
-            // Depending on policy, you might allow if accessToken is present, or fail. For stricter security, fail.
+            await clearOauthNonce();
             await chrome.storage.local.set({
               ahHaUserLoggedIn: false,
               authToken: null,
               idToken: null,
               tokenExpiryTime: null,
             });
+            currentUserLoggedIn = false;
+            currentAuthToken = null; // Update in-memory state
             sendResponseToPopup({
               status: "OAuth flow failed: Nonce claim missing in ID token.",
             });
@@ -312,12 +424,15 @@ function initiateOAuthFlow(sendResponseToPopup) {
           }
         } catch (e) {
           console.error("Error parsing ID token:", e);
+          await clearOauthNonce();
           await chrome.storage.local.set({
             ahHaUserLoggedIn: false,
             authToken: null,
             idToken: null,
             tokenExpiryTime: null,
           });
+          currentUserLoggedIn = false;
+          currentAuthToken = null; // Update in-memory state
           sendResponseToPopup({
             status: "OAuth flow failed: Could not parse ID token.",
           });
@@ -327,35 +442,74 @@ function initiateOAuthFlow(sendResponseToPopup) {
         console.warn(
           "ID token not found in redirect URL. Cannot verify nonce."
         );
-        // If id_token is essential for your flow (e.g. for nonce), you might fail here.
-        // For a flow that only needs access_token, this might be acceptable if nonce is not strictly enforced.
-        // Given Google requires nonce for id_token, its absence is problematic if id_token was expected.
+        await clearOauthNonce();
         await chrome.storage.local.set({
           ahHaUserLoggedIn: false,
           authToken: null,
           idToken: null,
           tokenExpiryTime: null,
         });
+        currentUserLoggedIn = false;
+        currentAuthToken = null; // Update in-memory state
         sendResponseToPopup({
           status: "OAuth flow failed: ID token missing from response.",
         });
         return;
       }
 
+      // Nonce has been verified (or an error occurred preventing verification).
+      // NOW it's safe to clear the nonce we originally stored for this flow.
+      await clearOauthNonce();
+
       if (accessToken) {
         const expiryTime = expiresIn
           ? Date.now() + parseInt(expiresIn, 10) * 1000
           : null;
-        await chrome.storage.local.set({
+
+        const tokenStorageObject = {
           authToken: accessToken,
           idToken: idToken,
           tokenExpiryTime: expiryTime,
           ahHaUserLoggedIn: true,
+        };
+
+        console.log(
+          "Attempting to store tokens in chrome.storage.local:",
+          tokenStorageObject
+        );
+        chrome.storage.local.set(tokenStorageObject, () => {
+          if (chrome.runtime.lastError) {
+            console.error(
+              "CRITICAL ERROR in chrome.storage.local.set callback after OAuth:",
+              chrome.runtime.lastError.message,
+              "Token data that was attempted to be stored:",
+              {
+                accessTokenSubstring: accessToken
+                  ? accessToken.substring(0, 10)
+                  : "N/A",
+                idTokenPresent: !!idToken,
+                ahHaUserLoggedInFlag: true,
+              }
+            );
+            currentAuthToken = null;
+            currentUserLoggedIn = false;
+            sendResponseToPopup({
+              status:
+                "Login Succeeded (OAuth), but CRITICAL error storing session details. Please check extension console.",
+              error: `Storage set error: ${chrome.runtime.lastError.message}`,
+            });
+          } else {
+            currentAuthToken = accessToken;
+            currentUserLoggedIn = true;
+            console.log(
+              "SUCCESS: chrome.storage.local.set completed. In-memory state updated. currentAuthToken set, currentUserLoggedIn=true. Tokens should be in storage."
+            );
+            sendResponseToPopup({
+              status: "Login successful. Tokens stored.",
+            });
+          }
         });
-        console.log("Access token and ID token stored successfully.");
-        sendResponseToPopup({
-          status: "Login successful. Tokens stored.",
-        });
+        console.log("chrome.storage.local.set for tokens has been called.");
       } else {
         const errorParam = params.get("error");
         console.error(
@@ -368,6 +522,8 @@ function initiateOAuthFlow(sendResponseToPopup) {
           idToken: null,
           tokenExpiryTime: null,
         });
+        currentUserLoggedIn = false;
+        currentAuthToken = null; // Update in-memory state
         sendResponseToPopup({
           status: "OAuth flow failed: No access token received.",
           error: errorParam || "Token missing",
@@ -383,6 +539,8 @@ function initiateOAuthFlow(sendResponseToPopup) {
         idToken: null,
         tokenExpiryTime: null,
       });
+      currentUserLoggedIn = false;
+      currentAuthToken = null; // Update in-memory state
       sendResponseToPopup({
         status: "OAuth flow threw an exception.",
         error: error.message,
@@ -443,6 +601,7 @@ async function saveSnippet(snippetData) {
 
   // 1. Check authentication status (this now checks for a valid token or flag)
   const isAuthenticated = await checkAuthenticationStatus();
+  console.log(`saveSnippet: isAuthenticated result = ${isAuthenticated}`); // Detailed log
   if (!isAuthenticated) {
     console.warn(
       "User not authenticated (checked via checkAuthenticationStatus). Snippet not saved."
@@ -462,7 +621,10 @@ async function saveSnippet(snippetData) {
   const tokenExpiryTime = tokenData.tokenExpiryTime;
   // const idToken = tokenData.idToken; // idToken is available if your backend needs it
 
-  if (!authToken) {
+  // Prioritize in-memory token for immediate use after login
+  const effectiveAuthToken = currentAuthToken || authToken;
+
+  if (!effectiveAuthToken) {
     console.warn(
       "Auth token not found in storage despite checkAuthenticationStatus passing. This should not happen. Snippet not saved."
     );
@@ -502,14 +664,16 @@ async function saveSnippet(snippetData) {
     console.log("Sending payload to API:", JSON.stringify(payload));
     console.log(
       "Using Auth Token:",
-      authToken ? authToken.substring(0, 10) + "..." : "No Token"
+      effectiveAuthToken
+        ? effectiveAuthToken.substring(0, 10) + "..."
+        : "No Token"
     );
 
     const response = await fetch(`${AH_HA_API_BASE_URL}/snippets`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${effectiveAuthToken}`,
       },
       body: JSON.stringify(payload),
     });
