@@ -9,6 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.genai import types as genai_types
 from models import AhHaSnippet, SnippetText
 from services.adk_service import get_adk_runner, get_tagging_agent
+from services.firestore_service import (
+    create_snippet as db_create_snippet,
+)  # Aliased to avoid name clashes if any
+from services.firestore_service import get_all_snippets as db_get_all_snippets
+from services.firestore_service import get_snippet_by_id as db_get_snippet_by_id
 
 app = FastAPI()
 
@@ -23,32 +28,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ah_ha_storage = []
-next_id = 1
+# In-memory storage removed, will use Firestore
+# ah_ha_storage = []
+# next_id = 1
 
 
 @app.post("/api/v1/snippets", response_model=AhHaSnippet)
-async def create_ah_ha(snippet: AhHaSnippet):
-    global next_id
-    snippet.id = next_id
-    next_id += 1
-    snippet.timestamp = datetime.datetime.now()
+async def create_ah_ha(snippet_create_data: AhHaSnippet):  # Renamed input for clarity
+    # ID and timestamp will be handled by Firestore service or set there
+    # snippet_create_data.id is Optional[str] now, Firestore generates it.
+    # snippet_create_data.timestamp can be set here or by Firestore server_timestamp
 
-    print(f"Attempting to generate tags for: '{snippet.title}' using LlmAgent")
+    # If timestamp is not set by client, set it now before sending to ADK/Firestore
+    if not snippet_create_data.timestamp:
+        snippet_create_data.timestamp = datetime.datetime.now()
 
-    if adk_runner and tagging_agent and snippet.content:
+    print(
+        f"Attempting to generate tags for: '{snippet_create_data.title}' using LlmAgent"
+    )
+
+    if adk_runner and tagging_agent and snippet_create_data.content:
         print(
             "ADK LlmAgent and Runner are available. Proceeding with direct tag generation."
         )
         try:
-            user_prompt = f'Title: "{snippet.title}"\nContent: "{snippet.content}"'
+            user_prompt = f'Title: "{snippet_create_data.title}"\nContent: "{snippet_create_data.content}"'
             input_message = genai_types.Content(
                 role="user", parts=[genai_types.Part(text=user_prompt)]
             )
 
-            user_id = f"user_snippet_{snippet.id if snippet.id else 'new'}"
+            # Use a temporary ID for ADK session if snippet ID is not yet available (it won't be from client)
+            # Firestore will generate the final ID.
+            temp_adk_id_part = (
+                snippet_create_data.id
+                if snippet_create_data.id
+                else os.urandom(4).hex()
+            )
+            user_id = f"user_snippet_{temp_adk_id_part}"
             session_id_for_adk = (
-                f"session_tagging_{snippet.id if snippet.id else os.urandom(8).hex()}"
+                f"session_tagging_{temp_adk_id_part}_{os.urandom(4).hex()}"
             )
 
             current_session = await adk_runner.session_service.get_session(
@@ -136,49 +154,43 @@ async def create_ah_ha(snippet: AhHaSnippet):
             )
 
             if parsed_tags_list:
-                snippet.generated_tags = parsed_tags_list
-                print(f"Final Parsed Tags from LlmAgent: {snippet.generated_tags}")
+                snippet_create_data.generated_tags = parsed_tags_list
+                print(
+                    f"Final Parsed Tags from LlmAgent: {snippet_create_data.generated_tags}"
+                )
             else:
                 print("ADK LlmAgent response did not yield parseable tags.")
-                snippet.generated_tags = []
+                snippet_create_data.generated_tags = []
         except Exception as e:
             print(f"ERROR generating tags with ADK LlmAgent: {e}")
-            snippet.generated_tags = []
+            snippet_create_data.generated_tags = []
     else:
         if not adk_runner or not tagging_agent:
             print("ADK LlmAgent or Runner not available. Skipping AI tag generation.")
-        if not snippet.content:
+        if not snippet_create_data.content:
             print("Snippet content is empty. Skipping AI tag generation.")
-        snippet.generated_tags = []
+        snippet_create_data.generated_tags = []
 
-    ah_ha_storage.append(snippet)
-    return snippet
+    # Save to Firestore
+    created_snippet = await db_create_snippet(snippet_create_data)
+    print(
+        f"DEBUG: Returning snippet from create_ah_ha: ID='{created_snippet.id}', Type={type(created_snippet.id)}"
+    )  # Debug print
+    return created_snippet
 
 
 @app.get("/ah-has/", response_model=List[AhHaSnippet])
 async def get_ah_has(search: Optional[str] = None):
-    if search:
-        search_lower = search.lower()
-        return [
-            s
-            for s in ah_ha_storage
-            if search_lower in s.title.lower()
-            or (
-                s.generated_tags
-                and any(search_lower in tag.lower() for tag in s.generated_tags)
-            )
-            or search_lower in s.content.lower()
-            or (s.notes and search_lower in s.notes.lower())
-        ]
-    return sorted(ah_ha_storage, key=lambda x: x.timestamp, reverse=True)
+    # Firestore service's get_all_snippets handles search and sorting by timestamp
+    return await db_get_all_snippets(search_term=search)
 
 
 @app.get("/ah-has/{ah_ha_id}/", response_model=AhHaSnippet)
-async def get_ah_ha_by_id(ah_ha_id: int):
-    for s in ah_ha_storage:
-        if s.id == ah_ha_id:
-            return s
-    return {"error": "Ah-ha not found"}
+async def get_ah_ha_by_id(ah_ha_id: str):  # ID is now a string from Firestore
+    snippet = await db_get_snippet_by_id(ah_ha_id)
+    if snippet:
+        return snippet
+    return {"error": "Ah-ha not found"}  # Or raise HTTPException(status_code=404)
 
 
 mock_chat_log = [
@@ -267,6 +279,10 @@ async def suggest_tags(request: SnippetText):
         else:
             break
     return {"suggested_tags": suggested_tags}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8010)
 
 
 if __name__ == "__main__":

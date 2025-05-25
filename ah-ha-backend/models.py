@@ -9,7 +9,7 @@ class SnippetText(BaseModel):
 
 
 class AhHaSnippet(BaseModel):
-    id: Optional[int] = None
+    id: Optional[str] = None  # Firestore IDs are strings
     title: str
     content: str
     permalink_to_origin: Optional[str] = None
