@@ -12,7 +12,7 @@ const OAUTH_CLIENT_ID =
   "36070612387-nib9a64uruobemn3hicj5oio9k3t5sdb.apps.googleusercontent.com";
 const OAUTH_SCOPES = "email profile openid"; // Adjust scopes as needed
 const OAUTH_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"; // e.g., 'https://accounts.google.com/o/oauth2/v2/auth'
-const OAUTH_REDIRECT_URI = `https://${chrome.runtime.id}.chromiumapp.org/`; // Standard redirect for Chrome extensions
+const OAUTH_REDIRECT_URI = `https://${chrome.runtime.id}.chromiumapp.org/oauth_callback.html`; // Standard redirect for Chrome extensions
 
 // --- Event Listeners ---
 
