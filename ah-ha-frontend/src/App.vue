@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ChatInterface from "./components/ChatInterface.vue";
 import CaptureAhHaModal from "./components/CaptureAhHaModal.vue";
 import MyAhHasView from "./components/MyAhHasView.vue";
 import { ref } from "vue";
@@ -72,7 +71,6 @@ const handleSaveAhHa = async (ahHaData: {
       <!-- <button @click="toggleCaptureModal">Capture Ah-ha</button> -->
     </header>
     <main>
-      <ChatInterface @open-capture-modal="openModalWithSnippet" />
       <MyAhHasView />
       <CaptureAhHaModal
         :show="showCaptureModal"

@@ -40,6 +40,16 @@
       <li v-for="item in ahHaItems" :key="item.id" class="ah-ha-item-card">
         <h3>{{ item.title }}</h3>
         <p class="snippet-content">"{{ item.content }}"</p>
+        <div v-if="item.permalink_to_origin" class="source-link-container">
+          <a
+            :href="item.permalink_to_origin"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="source-link"
+          >
+            View Source
+          </a>
+        </div>
         <div
           class="tags"
           v-if="item.generated_tags && item.generated_tags.length"
@@ -56,6 +66,14 @@
         >
           View Context
         </button>
+        <button
+          @click="deleteAhHa(item.id)"
+          class="delete-button"
+          :disabled="!item.id"
+          title="Delete this Ah-ha moment"
+        >
+          Delete
+        </button>
       </li>
     </ul>
   </div>
@@ -65,11 +83,12 @@
 import { ref, onMounted, computed } from "vue";
 
 interface AhHaItem {
-  id: number;
+  id: string; // Changed to string to match Firestore IDs
   title: string;
   generated_tags: string[] | null; // Changed from 'tags' to 'generated_tags'
   content: string;
   timestamp: string; // Assuming ISO string from backend
+  permalink_to_origin?: string | null; // Added permalink
   original_context?: string | null;
 }
 
@@ -126,6 +145,61 @@ const formatTimestamp = (isoString: string) => {
 onMounted(() => {
   fetchAhHas(true); // Fetch all on initial load
 });
+
+const deleteAhHa = async (id: string | null | undefined) => {
+  // Check if the ID is valid before proceeding
+  if (
+    !id ||
+    typeof id !== "string" ||
+    id.trim() === "" ||
+    id.trim().toLowerCase() === "null" ||
+    id.trim().toLowerCase() === "undefined"
+  ) {
+    console.error(
+      "Attempted to delete an Ah-ha moment with an invalid ID:",
+      id
+    );
+    error.value = "Cannot delete: Snippet ID is invalid or missing.";
+    return;
+  }
+
+  if (
+    !confirm(`Are you sure you want to delete this Ah-ha moment (ID: ${id})?`)
+  ) {
+    return;
+  }
+
+  isLoading.value = true;
+  error.value = null;
+  try {
+    const response = await fetch(
+      `http://localhost:8010/api/v1/snippets/${id}`,
+      {
+        method: "DELETE",
+      }
+    );
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Ah-ha moment with ID ${id} not found on the server.`);
+      }
+      // Try to parse error detail from backend if available
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: `HTTP error ${response.status}` }));
+      throw new Error(
+        errorData.detail || `HTTP error! status: ${response.status}`
+      );
+    }
+    // If deletion is successful (204 No Content)
+    ahHaItems.value = ahHaItems.value.filter((item) => item.id !== id);
+    console.log(`Ah-ha moment with ID ${id} deleted successfully.`);
+  } catch (e: any) {
+    console.error(`Failed to delete Ah-ha moment with ID ${id}:`, e);
+    error.value = `Failed to delete Ah-ha moment: ${e.message}.`;
+  } finally {
+    isLoading.value = false;
+  }
+};
 
 const allUniqueTags = computed(() => {
   const tagsSet = new Set<string>();
@@ -263,6 +337,23 @@ const allUniqueTags = computed(() => {
   }
 }
 
+.delete-button {
+  background-color: #d9534f; // Red for delete
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+  margin-top: 10px;
+  margin-left: 10px; /* Add some space if next to another button */
+  display: inline-block;
+
+  &:hover {
+    background-color: #c9302c;
+  }
+}
+
 .loading-message,
 .error-message,
 .empty-message {
@@ -315,6 +406,19 @@ const allUniqueTags = computed(() => {
     border-radius: 0 4px 4px 0;
     max-height: 120px; /* Limit height and allow scroll if needed */
     overflow-y: auto; /* Add scroll for long snippets */
+  }
+
+  .source-link-container {
+    margin-top: 8px;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+    .source-link {
+      color: #007bff;
+      text-decoration: none;
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
   .tags {
