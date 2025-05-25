@@ -4,6 +4,7 @@ from typing import List, Optional
 
 import config
 import uvicorn
+from fastapi import HTTPException  # For error responses
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from google.genai import types as genai_types
@@ -12,6 +13,9 @@ from services.adk_service import get_adk_runner, get_tagging_agent
 from services.firestore_service import (
     create_snippet as db_create_snippet,
 )  # Aliased to avoid name clashes if any
+from services.firestore_service import (
+    delete_snippet_by_id as db_delete_snippet_by_id,
+)  # Added delete
 from services.firestore_service import get_all_snippets as db_get_all_snippets
 from services.firestore_service import get_snippet_by_id as db_get_snippet_by_id
 
@@ -190,7 +194,24 @@ async def get_ah_ha_by_id(ah_ha_id: str):  # ID is now a string from Firestore
     snippet = await db_get_snippet_by_id(ah_ha_id)
     if snippet:
         return snippet
-    return {"error": "Ah-ha not found"}  # Or raise HTTPException(status_code=404)
+    # return {"error": "Ah-ha not found"} # Or raise HTTPException(status_code=404)
+    raise HTTPException(status_code=404, detail="Ah-ha not found")
+
+
+@app.delete(
+    "/api/v1/snippets/{ah_ha_id}", status_code=204
+)  # 204 No Content for successful delete
+async def delete_ah_ha(ah_ha_id: str):
+    success = await db_delete_snippet_by_id(ah_ha_id)
+    if not success:
+        # This could be because the document didn't exist or an actual delete error occurred.
+        # For simplicity, we'll treat "not success" as "not found" or "could not delete".
+        # The firestore_service logs the specific error.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ah-ha snippet with ID {ah_ha_id} not found or could not be deleted.",
+        )
+    return  # No content to return for 204
 
 
 mock_chat_log = [
@@ -279,6 +300,10 @@ async def suggest_tags(request: SnippetText):
         else:
             break
     return {"suggested_tags": suggested_tags}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8010)
 
 
 if __name__ == "__main__":

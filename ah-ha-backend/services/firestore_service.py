@@ -136,3 +136,23 @@ async def get_all_snippets(search_term: Optional[str] = None) -> List[AhHaSnippe
             )
 
     return snippets
+
+
+async def delete_snippet_by_id(snippet_id: str) -> bool:
+    """Deletes a snippet by its Firestore document ID."""
+    if not db:
+        raise ConnectionError("Firestore client not initialized.")
+
+    doc_ref = db.collection(SNIPPETS_COLLECTION).document(snippet_id)
+    try:
+        await doc_ref.delete()
+        # Check if document still exists to confirm deletion, though .delete() doesn't typically fail silently
+        # For true confirmation, you might try a get() after delete and expect it not to exist.
+        # However, for simplicity, we'll assume delete is successful if no exception is raised.
+        # The .delete() method itself does not return a value indicating success/failure directly,
+        # but raises an exception on error.
+        print(f"Snippet {snippet_id} successfully marked for deletion in Firestore.")
+        return True
+    except Exception as e:
+        print(f"Error deleting snippet {snippet_id} from Firestore: {e}")
+        return False
