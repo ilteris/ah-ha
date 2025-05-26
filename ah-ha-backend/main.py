@@ -4,18 +4,21 @@ from typing import List, Optional
 
 import config
 import uvicorn
-from fastapi import HTTPException  # For error responses
-from fastapi import FastAPI
+from bs4 import BeautifulSoup  # Import BeautifulSoup
+from fastapi import (
+    FastAPI,
+    HTTPException,  # For error responses
+)
 from fastapi.middleware.cors import CORSMiddleware
 from google.genai import types as genai_types
 from models import AhHaSnippet, SnippetText
 from services.adk_service import get_adk_runner, get_tagging_agent
 from services.firestore_service import (
-    create_snippet as db_create_snippet,
-)  # Aliased to avoid name clashes if any
+    create_snippet as db_create_snippet,  # Aliased to avoid name clashes if any
+)
 from services.firestore_service import (
-    delete_snippet_by_id as db_delete_snippet_by_id,
-)  # Added delete
+    delete_snippet_by_id as db_delete_snippet_by_id,  # Added delete
+)
 from services.firestore_service import get_all_snippets as db_get_all_snippets
 from services.firestore_service import get_snippet_by_id as db_get_snippet_by_id
 
@@ -56,7 +59,20 @@ async def create_ah_ha(snippet_create_data: AhHaSnippet):  # Renamed input for c
             "ADK LlmAgent and Runner are available. Proceeding with direct tag generation."
         )
         try:
-            user_prompt = f'Title: "{snippet_create_data.title}"\nContent: "{snippet_create_data.content}"'
+            content_for_llm = snippet_create_data.content
+            if (
+                snippet_create_data.content_type == "html"
+                and snippet_create_data.content
+            ):
+                soup = BeautifulSoup(snippet_create_data.content, "html.parser")
+                content_for_llm = soup.get_text(separator=" ", strip=True)
+                print(
+                    f"HTML content stripped for LLM. Original length: {len(snippet_create_data.content)}, Stripped length: {len(content_for_llm)}"
+                )
+
+            user_prompt = (
+                f'Title: "{snippet_create_data.title}"\nContent: "{content_for_llm}"'
+            )
             input_message = genai_types.Content(
                 role="user", parts=[genai_types.Part(text=user_prompt)]
             )

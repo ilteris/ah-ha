@@ -1,86 +1,108 @@
 <template>
   <div class="my-ah-has-view">
-    <h2>My Ah-ha Moments</h2>
-    <div class="controls-container">
-      <div class="search-bar">
-        <input
-          type="text"
-          v-model="searchTerm"
-          placeholder="Search by keyword..."
-          @keyup.enter="performSearch"
-        />
-        <button @click="performSearch" :disabled="isLoading">Search</button>
-      </div>
-      <button
-        @click="fetchAhHas(true)"
-        class="refresh-button"
-        :disabled="isLoading"
-      >
-        {{ isLoading ? "Refreshing..." : "Refresh All" }}
-      </button>
-    </div>
-
-    <div v-if="allUniqueTags.length" class="all-tags-container">
-      <h4>All Tags:</h4>
-      <span v-for="tag in allUniqueTags" :key="tag" class="tag all-tag-item">{{
-        tag
-      }}</span>
-    </div>
-
-    <div v-if="isLoading && !ahHaItems.length" class="loading-message">
+    <div
+      v-if="isLoading && !isReady"
+      class="loading-message initial-load-spinner"
+    >
       Loading Ah-ha moments...
     </div>
-    <div v-if="error" class="error-message">
+    <div v-else-if="error && !isReady" class="error-message">
       {{ error }}
     </div>
-    <div v-if="!isLoading && !ahHaItems.length && !error" class="empty-message">
-      No Ah-ha moments captured yet. Start capturing!
+    <div
+      v-else-if="isReady"
+      ref="contentAreaRef"
+      class="content-area"
+      :class="{ 'content-hidden': !fullyRendered }"
+    >
+      <div v-if="isLoading && !ahHaItems.length" class="loading-message">
+        Loading Ah-ha moments...
+      </div>
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
+      <div
+        v-if="!isLoading && !ahHaItems.length && !error"
+        class="empty-message"
+      >
+        No Ah-ha moments captured yet. Start capturing!
+      </div>
+      <List v-if="ahHaItems.length" ref="ahHaListCompRef" class="ah-ha-list">
+        <ListItem
+          v-for="item in ahHaItems"
+          :key="item.id"
+          :headline="item.title"
+          @click="navigateToDetail(item.id)"
+          style="
+            cursor: pointer;
+            margin-bottom: 8px;
+            border: 1px solid var(--md-sys-color-outline-variant);
+          "
+          lines="3-line+"
+        >
+          <!-- Content for headline and supportingText is now passed via props -->
+          <!-- Default slot is not used for primary content here based on ListItem structure -->
+          <template #trailing>
+            <div class="list-item-trailing-content">
+              <div
+                class="list-item-tags-container-trailing"
+                v-if="item.generated_tags && item.generated_tags.length"
+              >
+                <Chip
+                  v-for="tag in item.generated_tags"
+                  :key="tag"
+                  :label="tag"
+                  size="small"
+                  class="list-item-tag-chip"
+                />
+              </div>
+              <span class="list-item-timestamp">{{
+                formatTimestamp(item.timestamp)
+              }}</span>
+              <div class="list-item-actions">
+                <IconButton
+                  v-if="item.original_context"
+                  icon="visibility"
+                  @click.stop="showContext(item)"
+                  aria-label="View Context"
+                  size="small"
+                />
+                <IconButton
+                  icon="delete"
+                  @click.stop="deleteAhHa(item.id)"
+                  :disabled="!item.id"
+                  aria-label="Delete Ah-ha"
+                  size="small"
+                />
+              </div>
+            </div>
+          </template>
+        </ListItem>
+      </List>
     </div>
-    <ul v-if="ahHaItems.length" class="ah-ha-list">
-      <li v-for="item in ahHaItems" :key="item.id" class="ah-ha-item-card">
-        <h3>{{ item.title }}</h3>
-        <p class="snippet-content">"{{ item.content }}"</p>
-        <div v-if="item.permalink_to_origin" class="source-link-container">
-          <a
-            :href="item.permalink_to_origin"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="source-link"
-          >
-            View Source
-          </a>
-        </div>
-        <div
-          class="tags"
-          v-if="item.generated_tags && item.generated_tags.length"
-        >
-          <span v-for="tag in item.generated_tags" :key="tag" class="tag">{{
-            tag
-          }}</span>
-        </div>
-        <p class="timestamp">{{ formatTimestamp(item.timestamp) }}</p>
-        <button
-          v-if="item.original_context"
-          @click="showContext(item)"
-          class="view-context-button"
-        >
-          View Context
-        </button>
-        <button
-          @click="deleteAhHa(item.id)"
-          class="delete-button"
-          :disabled="!item.id"
-          title="Delete this Ah-ha moment"
-        >
-          Delete
-        </button>
-      </li>
-    </ul>
+    <!-- Replaced div with StackedCard, moved to bottom -->
+    <StackedCard
+      v-if="allUniqueTags.length"
+      :titleText="'All Tags:'"
+      :style="'elevated'"
+      class="all-tags-card-bottom"
+    >
+      <div class="tag-cloud-wrapper">
+        <Chip
+          v-for="tag in allUniqueTags"
+          :key="tag"
+          :label="tag"
+          class="all-tag-item"
+        />
+      </div>
+    </StackedCard>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, onUpdated, nextTick } from "vue"; // Added onUpdated and nextTick
+import { useRouter } from "vue-router"; // Import useRouter
+import { Chip, IconButton, List, ListItem, StackedCard } from "gm3-vue"; // Import StackedCard
 
 interface AhHaItem {
   id: string; // Changed to string to match Firestore IDs
@@ -96,8 +118,37 @@ const ahHaItems = ref<AhHaItem[]>([]);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const searchTerm = ref("");
+const router = useRouter(); // Initialize router
+const isReady = ref(false); // New reactive variable for FOUC control
+const fullyRendered = ref(false); // For CSS transition to control visibility
+
+const contentAreaRef = ref<HTMLDivElement | null>(null);
+const ahHaListCompRef = ref<any | null>(null); // Ref for the List component instance
+let loggedListFirstAppearanceWidth = false;
+let loggedContentAreaFullyRenderedWidth = false;
+let loggedListFullyRenderedWidth = false;
+
+// const tableHeaders = ref([...]); // DataTable specific, can be removed
+
+const navigateToDetail = (itemId: string) => {
+  router.push({ name: "AhHaDetail", params: { id: itemId } });
+};
+
+const truncateSnippet = (content: string, maxLength = 50) => {
+  // Reduced maxLength
+  if (content.length <= maxLength) {
+    return content;
+  }
+  return content.substring(0, maxLength) + "...";
+};
 
 const fetchAhHas = async (fetchAll = false) => {
+  console.log(
+    "[MyAhHasView] fetchAhHas started. FetchAll:",
+    fetchAll,
+    "SearchTerm:",
+    searchTerm.value
+  );
   isLoading.value = true;
   error.value = null;
   let url = "http://localhost:8010/ah-has/";
@@ -112,21 +163,55 @@ const fetchAhHas = async (fetchAll = false) => {
     }
     const data = await response.json();
     ahHaItems.value = data;
+    console.log("[MyAhHasView] fetchAhHas success. Items count:", data.length);
+
+    // If this was the initial fetch (triggered from onMounted)
+    if (fetchAll) {
+      await nextTick(); // Wait for DOM to update with items (if any)
+      isReady.value = true; // Mark as ready to display content
+      console.log(
+        "[MyAhHasView] fetchAhHas: Initial data loaded, isReady set to true."
+      );
+      await nextTick(); // Ensure .content-area is in DOM and ref is populated due to isReady=true
+      if (contentAreaRef.value) {
+        console.log(
+          `[MyAhHasView Debug] Width of .content-area after isReady=true, before fullyRendered timeout: ${contentAreaRef.value.offsetWidth}px, Height: ${contentAreaRef.value.offsetHeight}px`
+        );
+      }
+      // After isReady allows rendering, wait for Vue to patch DOM, then for browser to process, then make visible
+      // The existing nextTick here is fine.
+      await nextTick();
+      setTimeout(() => {
+        fullyRendered.value = true;
+        console.log("[MyAhHasView] fetchAhHas: Content set to fullyRendered.");
+      }, 0); // A small timeout can help ensure styles are applied before visibility change
+    }
+
     if (!data.length && !fetchAll && searchTerm.value.trim() !== "") {
       error.value = `No Ah-ha moments found for "${searchTerm.value.trim()}". Try refreshing all.`;
     } else if (!data.length && fetchAll) {
       error.value = "No Ah-ha moments captured yet. Start capturing!";
     }
   } catch (e: any) {
-    console.error("Failed to fetch Ah-ha moments:", e);
+    console.error("[MyAhHasView] Failed to fetch Ah-ha moments:", e);
     error.value = "Failed to load Ah-ha moments. Please try again.";
+    if (fetchAll && !ahHaItems.value.length) {
+      // If initial fetch failed or returned no data
+      isReady.value = true; // Still mark as ready to show empty/error state
+      await nextTick(); // Ensure DOM is updated for error/empty state & contentAreaRef
+      if (contentAreaRef.value) {
+        console.log(
+          `[MyAhHasView Debug] Width of .content-area after isReady=true (error/empty path), before fullyRendered: ${contentAreaRef.value.offsetWidth}px, Height: ${contentAreaRef.value.offsetHeight}px`
+        );
+      }
+      fullyRendered.value = true; // Make the error/empty state visible
+      console.log(
+        "[MyAhHasView] fetchAhHas: Initial data fetch failed or empty, isReady and fullyRendered set to true."
+      );
+    }
   } finally {
     isLoading.value = false;
   }
-};
-
-const performSearch = () => {
-  fetchAhHas(false);
 };
 
 const showContext = (item: AhHaItem) => {
@@ -143,7 +228,49 @@ const formatTimestamp = (isoString: string) => {
 };
 
 onMounted(() => {
+  console.log(
+    "[MyAhHasView] onMounted: Component is mounted. Fetching initial data..."
+  );
   fetchAhHas(true); // Fetch all on initial load
+  console.log("[MyAhHasView] onMounted: Initial fetchAhHas called.");
+});
+
+onUpdated(async () => {
+  console.log("[MyAhHasView] onUpdated: Component has been updated.");
+  await nextTick(); // Ensure DOM and refs are settled after updates
+
+  const listEl = ahHaListCompRef.value?.$el;
+
+  if (ahHaItems.value.length === 0) {
+    loggedListFirstAppearanceWidth = false; // Reset if list becomes empty
+  }
+
+  if (listEl && ahHaItems.value.length > 0 && !loggedListFirstAppearanceWidth) {
+    console.log(
+      `[MyAhHasView Debug] Width of .ah-ha-list ($el) on first appearance with items: ${listEl.offsetWidth}px, Height: ${listEl.offsetHeight}px`
+    );
+    loggedListFirstAppearanceWidth = true;
+  }
+
+  if (fullyRendered.value) {
+    if (contentAreaRef.value && !loggedContentAreaFullyRenderedWidth) {
+      console.log(
+        `[MyAhHasView Debug] Width of .content-area when fullyRendered=true (onUpdated): ${contentAreaRef.value.offsetWidth}px, Height: ${contentAreaRef.value.offsetHeight}px`
+      );
+      loggedContentAreaFullyRenderedWidth = true;
+    }
+    if (listEl && ahHaItems.value.length > 0 && !loggedListFullyRenderedWidth) {
+      console.log(
+        `[MyAhHasView Debug] Width of .ah-ha-list ($el) when fullyRendered=true (onUpdated): ${listEl.offsetWidth}px, Height: ${listEl.offsetHeight}px (items: ${ahHaItems.value.length})`
+      );
+      loggedListFullyRenderedWidth = true;
+    }
+  } else {
+    // If not fully rendered, reset flags for the "fullyRendered" specific logs
+    loggedListFullyRenderedWidth = false;
+    loggedContentAreaFullyRenderedWidth = false;
+    // loggedListFirstAppearanceWidth is reset when ahHaItems is empty
+  }
 });
 
 const deleteAhHa = async (id: string | null | undefined) => {
@@ -213,113 +340,100 @@ const allUniqueTags = computed(() => {
 </script>
 
 <style scoped lang="scss">
-.my-ah-has-view {
-  padding: 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background-color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-
-  h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-    color: #333;
-    text-align: center;
-  }
+.content-hidden {
+  visibility: hidden;
+  /* opacity: 0; */ /* Uncomment with transition for a fade-in effect */
+  /* transition: opacity 0.2s ease-out; */
 }
 
-.all-tags-container {
-  margin-bottom: 20px;
-  padding: 10px;
-  background-color: #f0f0f0;
-  border-radius: 6px;
-  border: 1px solid #e0e0e0;
+/*
+.content-area:not(.content-hidden) {
+  opacity: 1;
+}
+*/
 
-  h4 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    color: #333;
+.initial-load-spinner {
+  /* Styles to make the initial loading message more prominent or centered if desired */
+  /* For example, ensure it takes up space to prevent layout shift */
+  min-height: 200px; /* Adjust as needed */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.my-ah-has-view {
+  /* padding: 20px; AppBar will provide its own padding/structure */
+  /* border: 1px solid #e0e0e0; */
+  /* border-radius: 8px; */
+  /* background-color: #ffffff; */ /* Assuming AppBar or page background handles this */
+  /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* Make view take full height for flex layout */
+
+  /* h2 styling removed as AppBar's title prop will be used */
+}
+
+.app-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-bar-search-input {
+  padding: 8px 12px; /* Adjust padding to fit AppBar style */
+  border: 1px solid var(--md-sys-color-outline, #747775); /* Use GM3 variable */
+  border-radius: var(--md-sys-shape-corner-medium, 8px); /* Use GM3 variable */
+  font-size: var(
+    --md-sys-typescale-body-medium-font-size,
+    14px
+  ); /* Use GM3 variable */
+  background-color: var(
+    --md-sys-color-surface-container-highest,
+    #e1e3e1
+  ); /* Use GM3 variable */
+  color: var(--md-sys-color-on-surface-variant, #444746); /* Use GM3 variable */
+}
+
+.content-area {
+  padding: 20px; /* Add padding back to the content area below AppBar */
+  flex-grow: 1; /* Allows this area to expand and push the card down */
+  overflow-y: auto; /* Allows content to scroll if it exceeds available space */
+  /* overflow-x: auto; // Changed to hidden */
+  overflow-x: hidden;
+  width: 100%;
+  box-sizing: border-box; /* Ensures padding doesn't add to the width */
+}
+
+/* Removed .all-tags-container styles */
+
+.all-tags-card-bottom {
+  /* Applied to the StackedCard component */
+  margin: 16px; /* Spacing around the card */
+  margin-top: auto; /* Pushes the card to the bottom of the flex container */
+  width: calc(
+    100% - 32px
+  ); /* Overrides StackedCard's default width, makes it responsive */
+  box-sizing: border-box;
+  flex-shrink: 0; /* Prevents the card from shrinking */
+
+  /* StackedCard's internal 'titleText' prop is used for "All Tags:" */
+
+  .tag-cloud-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px; /* Spacing between chips */
+    padding-top: 8px; /* Add some space below the card's title if needed */
   }
 
   .all-tag-item {
-    display: inline-block;
-    background-color: #007bff;
-    color: white;
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-size: 0.85em;
-    margin-right: 8px;
-    margin-bottom: 8px;
-    cursor: default; // Or make them clickable for filtering later
-
-    &:hover {
-      background-color: #0056b3;
-    }
+    /* Removed margins as 'gap' on wrapper handles spacing */
+    /* Chip component itself should handle its inline display characteristics */
   }
 }
 
-.controls-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  gap: 15px;
-  flex-wrap: wrap; /* Allow wrapping on smaller screens */
-}
-
-.search-bar {
-  display: flex;
-  gap: 10px;
-  flex-grow: 1; /* Allow search bar to take available space */
-
-  input[type="text"] {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    font-size: 0.9em;
-    flex-grow: 1; /* Input field takes most space in search-bar */
-    min-width: 200px; /* Minimum width for the input */
-  }
-
-  button {
-    padding: 10px 15px;
-    background-color: #5cb85c; // Green for search
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 0.9em;
-    transition: background-color 0.2s ease;
-
-    &:hover {
-      background-color: #4cae4c;
-    }
-    &:disabled {
-      background-color: #ccc;
-      cursor: not-allowed;
-    }
-  }
-}
-
-.refresh-button {
-  padding: 10px 15px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 0.9em;
-  transition: background-color 0.2s ease;
-  white-space: nowrap; /* Prevent button text from wrapping */
-
-  &:hover {
-    background-color: #0056b3;
-  }
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
-}
+/* .controls-container and its children (.search-bar, .refresh-button) styling removed as they are replaced by AppBar */
 
 .view-context-button {
   background-color: #6c757d; // Grey
@@ -370,76 +484,50 @@ const allUniqueTags = computed(() => {
   border-radius: 4px;
 }
 
+/* Styles for .ah-ha-data-table and its children can be removed or commented out */
+/*
+.ah-ha-data-table {
+  // ... previous DataTable styles ...
+}
+*/
+
 .ah-ha-list {
-  list-style-type: none;
-  padding: 0;
-  margin: 0;
+  // Add any specific styling for the List if needed
 }
 
-.ah-ha-item-card {
-  background-color: #f9f9f9;
-  border: 1px solid #eee;
-  border-radius: 6px;
-  padding: 15px 20px;
-  margin-bottom: 15px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.2s ease-in-out;
+/* Removed .list-item-content-wrapper, .list-item-headline, .list-item-supporting-text, .list-item-tags-container
+   as content is now primarily handled by ListItem props and the #end slot. */
 
-  &:hover {
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  h3 {
-    margin-top: 0;
-    margin-bottom: 8px;
-    color: #0056b3; // Darker blue for title
-  }
-
-  .snippet-content {
-    font-style: italic;
-    color: #555;
-    margin-bottom: 10px;
-    padding-left: 10px;
-    border-left: 3px solid #007bff;
-    background-color: #f0f8ff; // Very light blue
-    padding: 8px;
-    border-radius: 0 4px 4px 0;
-    max-height: 120px; /* Limit height and allow scroll if needed */
-    overflow-y: auto; /* Add scroll for long snippets */
-  }
-
-  .source-link-container {
-    margin-top: 8px;
-    margin-bottom: 8px;
-    font-size: 0.9em;
-    .source-link {
-      color: #007bff;
-      text-decoration: none;
-      &:hover {
-        text-decoration: underline;
-      }
-    }
-  }
-
-  .tags {
-    margin-bottom: 10px;
-    .tag {
-      display: inline-block;
-      background-color: #e0e0e0;
-      color: #555;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 0.8em;
-      margin-right: 5px;
-      margin-bottom: 5px;
-    }
-  }
-
-  .timestamp {
-    font-size: 0.8em;
-    color: #777;
-    text-align: right;
-    margin-bottom: 0;
-  }
+.list-item-trailing-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px; /* Space between tags, timestamp, and actions */
 }
+
+.list-item-tags-container-trailing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px; /* Smaller gap for chips in trailing content */
+  justify-content: flex-end; /* Align chips to the right if they wrap */
+}
+
+.list-item-tag-chip {
+  /* Chip component already has styling, additional overrides if needed */
+}
+
+.list-item-timestamp {
+  font-size: 0.8em;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.list-item-actions {
+  display: flex;
+  gap: 4px; /* Smaller gap for action buttons */
+}
+
+/* Remove .ah-ha-gm-list and .list-item-meta-content styles */
+
+/* Styling for view-context-button might need adjustment if it's an IconButton now */
+/* .view-context-button styling is kept for now if it's still a regular button */
 </style>

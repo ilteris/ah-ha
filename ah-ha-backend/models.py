@@ -14,5 +14,6 @@ class AhHaSnippet(BaseModel):
     content: str
     permalink_to_origin: Optional[str] = None
     notes: Optional[str] = None
+    content_type: Optional[str] = None # To store 'html' or 'text'
     generated_tags: Optional[List[str]] = None
     timestamp: Optional[datetime.datetime] = None

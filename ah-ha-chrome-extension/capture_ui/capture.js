@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const titleInput = document.getElementById("snippet-title");
-  const contentTextarea = document.getElementById("snippet-content");
+  const contentEditableDiv = document.getElementById("snippet-content"); // Changed from contentTextarea
   const notesTextarea = document.getElementById("snippet-notes"); // Added for notes
   const urlInput = document.getElementById("snippet-url"); // Hidden, but we'll store URL here
   const saveButton = document.getElementById("save-button");
@@ -14,8 +14,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (data.title) {
       titleInput.value = data.title;
     }
-    if (data.textContent) {
-      contentTextarea.value = data.textContent;
+    // Populate contentEditableDiv with HTML, fallback to textContent
+    if (data.htmlContent) {
+      contentEditableDiv.innerHTML = data.htmlContent;
+    } else if (data.textContent) {
+      contentEditableDiv.innerText = data.textContent; // Fallback for plain text
     }
     if (data.sourceUrl) {
       urlInput.value = data.sourceUrl; // Store it, though field is hidden
@@ -29,33 +32,53 @@ document.addEventListener("DOMContentLoaded", () => {
   // For now, let's assume URL parameters for simplicity and robustness.
 
   const urlParams = new URLSearchParams(window.location.search);
-  const encodedData = urlParams.get("data");
+  const dataKey = urlParams.get("dataKey");
 
-  if (encodedData) {
-    try {
-      console.log("Encoded data from URL:", encodedData);
-      const decodedString = decodeURIComponent(encodedData);
-      console.log("Decoded string:", decodedString);
-      const decodedData = JSON.parse(decodedString);
-      console.log("Parsed data:", decodedData);
-      populateForm(decodedData);
-    } catch (e) {
-      console.error("Error parsing initial data from URL:", e);
-      console.error("Encoded data that failed was:", encodedData);
-      if (typeof decodedString !== "undefined") {
+  if (dataKey) {
+    chrome.storage.local.get(dataKey, (result) => {
+      if (chrome.runtime.lastError) {
         console.error(
-          "Decoded string that failed to parse was:",
-          decodedString
+          "Error retrieving data from local storage:",
+          chrome.runtime.lastError.message
         );
+        titleInput.value = "Error loading data";
+        contentEditableDiv.innerText =
+          "Could not load snippet content (storage read error).";
+        return;
       }
-      // Fallback or error display
-      titleInput.value = "Error loading data";
-      contentTextarea.value = "Could not load snippet content.";
-    }
+
+      const storedData = result[dataKey];
+      if (storedData) {
+        console.log("Data retrieved from local storage:", storedData);
+        populateForm(storedData);
+        // Clean up the data from local storage
+        chrome.storage.local.remove(dataKey, () => {
+          if (chrome.runtime.lastError) {
+            console.error(
+              "Error removing data from local storage:",
+              chrome.runtime.lastError.message
+            );
+          } else {
+            console.log(
+              "Cleaned up data from local storage with key:",
+              dataKey
+            );
+          }
+        });
+      } else {
+        console.error("No data found in local storage for key:", dataKey);
+        titleInput.value = "Error loading data";
+        contentEditableDiv.innerText =
+          "Could not load snippet content (data missing).";
+      }
+    });
   } else {
-    console.warn("No initial data found in URL parameters for capture UI.");
+    console.warn("No dataKey found in URL parameters for capture UI.");
     // Potentially close the window or show an error if no data is present,
     // as this UI isn't meant to be opened directly without context.
+    titleInput.value = "Error loading data";
+    contentEditableDiv.innerText =
+      "Could not load snippet content (no data key).";
   }
 
   saveButton.addEventListener("click", () => {
@@ -63,13 +86,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const snippetData = {
       title: titleInput.value.trim(),
-      content: contentTextarea.value.trim(),
+      htmlContent: contentEditableDiv.innerHTML.trim(), // Get HTML content
+      textContent: contentEditableDiv.innerText.trim(), // Also get plain text for fallback/summary
       notes: notesTextarea.value.trim(), // Added notes
       permalink_to_origin: urlInput.value, // Get from the hidden input
       // original_context: initialData ? initialData.context : '', // If you pass full context
     };
 
-    if (!snippetData.title && !snippetData.content) {
+    if (!snippetData.title && !snippetData.textContent) {
+      // Check textContent for emptiness
       alert("Title or content cannot be empty.");
       return;
     }

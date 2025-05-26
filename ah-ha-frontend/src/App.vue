@@ -1,15 +1,63 @@
 <script setup lang="ts">
+import { ref, watch } from "vue"; // Added watch
 import CaptureAhHaModal from "./components/CaptureAhHaModal.vue";
-import MyAhHasView from "./components/MyAhHasView.vue";
-import { ref } from "vue";
+
+// GM3 Components from linked gm3-vue library
+import {
+  NavigationRail,
+  NavigationItem,
+  FAB,
+  AppBar,
+  IconButton,
+  ExtendedFAB, // Added ExtendedFAB
+} from "gm3-vue"; // Added AppBar and IconButton
 
 const showCaptureModal = ref(false);
+const globalSearchTerm = ref(""); // For AppBar search
+const globalSearchValueFromAppBar = ref(""); // To receive search value if not using v-model
+const isNavRailExpanded = ref(false);
+
+const toggleNavRail = () => {
+  isNavRailExpanded.value = !isNavRailExpanded.value;
+};
+
+// Placeholder for actual search logic or event emission to children
+watch(globalSearchTerm, (newValue) => {
+  console.log("Global search term changed (v-model):", newValue);
+  // Here you would typically trigger a search action, perhaps by emitting an event
+  // or calling a method in a shared service/store that MyAhHasView listens to.
+});
+
+watch(globalSearchValueFromAppBar, (newValue) => {
+  console.log("Search value from AppBar event:", newValue);
+  // Similar logic for handling search
+});
+
+const handleSearchIconClick = () => {
+  console.log("Search icon clicked");
+  // Implement search toggle or navigation
+};
+
+const handleLoginIconClick = () => {
+  console.log("Login icon clicked");
+  // Implement login action
+};
+
+// handleTrailingIconClick might not be needed if all trailing items have specific handlers
+// const handleTrailingIconClick = (iconName: string) => {
+//   if (iconName === "refresh") {
+//     handleGlobalRefresh();
+//   }
+//   // Handle other icons if added
+// };
+
 const currentSnippet = ref("");
 const currentContext = ref("");
 
-const openModalWithSnippet = (data: { snippet: string; context: string }) => {
-  currentSnippet.value = data.snippet;
-  currentContext.value = data.context;
+const triggerCaptureModal = () => {
+  // For FAB, open with empty snippet/context or predefined values
+  currentSnippet.value = ""; // Or some default
+  currentContext.value = ""; // Or some default
   showCaptureModal.value = true;
 };
 
@@ -65,75 +113,137 @@ const handleSaveAhHa = async (ahHaData: {
 </script>
 
 <template>
-  <div id="app-container">
-    <header>
-      <h1>Ah-ha! MVP Demo</h1>
-      <!-- <button @click="toggleCaptureModal">Capture Ah-ha</button> -->
-    </header>
-    <main>
-      <MyAhHasView />
-      <CaptureAhHaModal
-        :show="showCaptureModal"
-        :snippet="currentSnippet"
-        :context="currentContext"
-        @close="closeCaptureModal"
-        @save="handleSaveAhHa"
+  <div class="app-layout">
+    <NavigationRail :expanded="isNavRailExpanded" style="flex-shrink: 0">
+      <template #header>
+        <button
+          @click="toggleNavRail"
+          aria-label="Menu"
+          class="material-symbols-outlined"
+          style="
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 16px;
+            font-size: 24px;
+            color: var(--md-sys-color-on-surface-variant);
+          "
+        >
+          menu
+        </button>
+      </template>
+
+      <template #fab="{ expanded: isRailExpandedInSlot }">
+        <ExtendedFAB
+          v-if="isRailExpandedInSlot"
+          icon="add"
+          label="Capture"
+          aria-label="Capture Ah-Ha"
+          size="small"
+          @click="triggerCaptureModal"
+        />
+        <FAB
+          v-else
+          icon="add"
+          aria-label="Capture Ah-Ha"
+          @click="triggerCaptureModal"
+        />
+      </template>
+      <NavigationItem
+        icon="search"
+        label="Search"
+        :itemType="isNavRailExpanded ? 'rail-expanded' : 'rail'"
       />
-    </main>
-    <footer>
-      <p>&copy; 2025 Ah-ha Project</p>
-    </footer>
+      <NavigationItem
+        icon="dashboard"
+        label="Dashboard"
+        :itemType="isNavRailExpanded ? 'rail-expanded' : 'rail'"
+      />
+    </NavigationRail>
+
+    <div class="main-content-wrapper">
+      <AppBar headline="Ah-ha Moments">
+        <template #trailing>
+          <div
+            class="app-bar-actions"
+            style="display: flex; gap: 8px; align-items: center; height: 48px"
+          >
+            <IconButton
+              icon="search"
+              @click="handleSearchIconClick"
+              aria-label="Search"
+            />
+            <IconButton
+              icon="login"
+              @click="handleLoginIconClick"
+              aria-label="Login"
+            />
+          </div>
+        </template>
+      </AppBar>
+      <div class="router-view-content">
+        <div class="router-view-inner-padding">
+          <router-view :global-search-query="globalSearchTerm" />
+          <!-- Pass globalSearchTerm to the view -->
+          <!-- Vue Router will render the matched component here -->
+        </div>
+      </div>
+    </div>
+
+    <CaptureAhHaModal
+      :show="showCaptureModal"
+      :snippet="currentSnippet"
+      :context="currentContext"
+      @close="closeCaptureModal"
+      @save="handleSaveAhHa"
+    />
   </div>
 </template>
 
 <style lang="scss">
-/* Global styles (or move to a main.scss and import here) */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+body,
+html {
   margin: 0;
   padding: 0;
-  background-color: #f4f7f9;
-  color: #333;
+  font-family: var(
+    --md-sys-typescale-body-medium-font-family-name,
+    "Roboto",
+    sans-serif
+  ); /* Using GM3 typography token */
+  background-color: var(--md-sys-color-surface-container-low, #f8f9fa);
+  color: var(--md-sys-color-on-surface, #1c1b1f);
+  height: 100%;
+  overflow: hidden; /* Prevent body scroll when layout is 100vh */
 }
 
-#app-container {
+.app-layout {
+  display: flex;
+  height: 100vh;
+  background-color: var(
+    --md-sys-color-surface-bright
+  ); // Slightly off-white like reference
+}
+
+.main-content-wrapper {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  max-width: 900px; /* Max width for the app content */
-  margin: 0 auto; /* Center the app */
-  padding: 20px;
-  box-sizing: border-box;
-}
-
-header {
-  background-color: #4a90e2; // A pleasant blue
-  color: white;
-  padding: 15px 20px;
-  text-align: center;
-  border-radius: 8px 8px 0 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-  h1 {
-    margin: 0;
-    font-size: 1.8em;
-  }
-}
-
-main {
   flex-grow: 1;
-  padding: 20px 0; /* Add some padding around the main content area */
+  overflow: hidden; /* Prevent this wrapper from scrolling, AppBar is fixed height */
 }
 
-footer {
-  text-align: center;
-  padding: 15px;
-  font-size: 0.9em;
-  color: #777;
-  border-top: 1px solid #eee;
-  margin-top: auto; /* Push footer to the bottom */
+.router-view-content {
+  flex-grow: 1;
+  overflow-y: auto; /* Allow content of router-view to scroll */
+  /* Padding moved to inner div */
 }
 
-/* Scoped styles for App.vue specific elements if needed, but most are global here */
+.router-view-inner-padding {
+  padding: 20px; /* Add padding around the page content */
+}
+
+/* Ensure material symbols are styled if not handled by GM3 */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  font-size: 24px; /* Default icon size */
+}
 </style>

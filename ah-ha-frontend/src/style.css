@@ -1,11 +1,50 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Google Sans Text', Roboto, "Helvetica Neue", Arial, sans-serif; /* Prioritize Google Sans Text */
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* color-scheme: light dark; */ /* Removed to force light theme */
+  color: #213547; /* Default light theme text color */
+  background-color: #fcfcff; /* Default light theme background */
+  /* Material Design 3 System Tokens (Light Theme) */
+  --md-sys-color-primary: #0062a0;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #d1e4ff;
+  --md-sys-color-on-primary-container: #001d36;
+  --md-sys-color-secondary: #555f71;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #d9e2f9;
+  --md-sys-color-on-secondary-container: #121c2b;
+  --md-sys-color-tertiary: #6d5677;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #f6d9ff;
+  --md-sys-color-on-tertiary-container: #271431;
+  --md-sys-color-error: #ba1a1a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #ffdad6;
+  --md-sys-color-on-error-container: #410002;
+  --md-sys-color-background: #fcfcff;
+  --md-sys-color-on-background: #1a1c1e;
+  --md-sys-color-surface: #fcfcff;
+  --md-sys-color-on-surface: #1a1c1e;
+  --md-sys-color-surface-variant: #dfe3eb;
+  --md-sys-color-on-surface-variant: #42474e;
+  --md-sys-color-outline: #73777f;
+  --md-sys-color-outline-variant: #c2c7cf;
+  --md-sys-color-shadow: #000000;
+  --md-sys-color-scrim: #000000;
+  --md-sys-color-inverse-surface: #2f3033;
+  --md-sys-color-inverse-on-surface: #f0f0f3;
+  --md-sys-color-inverse-primary: #9cceff;
+  --md-sys-color-surface-dim: #dcdde0;
+  --md-sys-color-surface-bright: #fcfcff;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #f6f6f9;
+  --md-sys-color-surface-container: #f0f0f3;
+  --md-sys-color-surface-container-high: #eaebee;
+  --md-sys-color-surface-container-highest: #e4e5e8;
+
+  /* --fab-shadow should be provided by gm3-vue library's CSS */
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -42,7 +81,6 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
 }
@@ -54,17 +92,13 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-.card {
-  padding: 2em;
-}
+
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  margin: 0 0;
 }
 
+/*
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
@@ -77,3 +111,4 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+*/

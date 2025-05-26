@@ -1,6 +1,12 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
   "compilerOptions": {
+    "baseUrl": ".", // Added baseUrl
+    "paths": {
+      // Added paths alias
+      "@/*": ["src/*"],
+      "gm3-vue": ["../gm3-vue"] // Alias for the linked gm3-vue library
+    },
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
     /* Linting */

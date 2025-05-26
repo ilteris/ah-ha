@@ -10,14 +10,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Example: If background script needs to re-verify selection or get more context
     const selection = window.getSelection().toString();
     sendResponse({ selection: selection, url: window.location.href });
+    return true; // Indicate async response
   } else if (request.type === "SHOW_CAPTURE_UI") {
     // Placeholder for future functionality to show some UI on the page
     console.log("Request to show capture UI received.");
     // Example: insertCaptureModal(request.data);
     sendResponse({ status: "Capture UI request noted." });
+    return true; // Indicate async response
+  } else if (request.type === "GET_SELECTED_HTML") {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const div = document.createElement("div");
+      div.appendChild(range.cloneContents());
+      sendResponse({
+        html: div.innerHTML,
+        text: selection.toString(),
+        url: window.location.href,
+      });
+    } else {
+      sendResponse({
+        html: "",
+        text: "",
+        url: window.location.href,
+      });
+    }
+    return true; // Important for async response
   }
-  // Return true if you intend to send a response asynchronously.
-  // return true;
+  // For other synchronous messages, you might not need to return true.
 });
 
 // Example: A function that could be called to send selected text to background
