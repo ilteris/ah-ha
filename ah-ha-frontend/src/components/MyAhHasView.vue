@@ -100,7 +100,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, onUpdated, nextTick } from "vue"; // Added onUpdated and nextTick
+import {
+  ref,
+  onMounted,
+  computed,
+  onUpdated,
+  nextTick,
+  defineExpose,
+} from "vue"; // Added onUpdated, nextTick, defineExpose
 import { useRouter } from "vue-router"; // Import useRouter
 import { Chip, IconButton, List, ListItem, StackedCard } from "gm3-vue"; // Import StackedCard
 
@@ -143,13 +150,22 @@ const truncateSnippet = (content: string, maxLength = 50) => {
   return content.substring(0, maxLength) + "...";
 };
 
-const fetchAhHas = async (fetchAll = false) => {
-  console.log(
-    "[MyAhHasView] fetchAhHas started. FetchAll:",
-    fetchAll,
-    "SearchTerm:",
-    searchTerm.value
-  );
+const fetchAhHas = async (
+  fetchAll = false,
+  triggeredBy: string | null = null
+) => {
+  if (triggeredBy) {
+    console.log(
+      `[MyAhHasView] fetchAhHas called. Trigger: ${triggeredBy}. FetchAll: ${fetchAll}, SearchTerm: ${searchTerm.value}`
+    );
+  } else {
+    console.log(
+      "[MyAhHasView] fetchAhHas started. FetchAll:",
+      fetchAll,
+      "SearchTerm:",
+      searchTerm.value
+    );
+  }
   isLoading.value = true;
   error.value = null;
   let url = "http://localhost:8010/ah-has/";
@@ -337,6 +353,10 @@ const allUniqueTags = computed(() => {
     }
   });
   return Array.from(tagsSet).sort();
+});
+
+defineExpose({
+  fetchAhHas,
 });
 </script>
 

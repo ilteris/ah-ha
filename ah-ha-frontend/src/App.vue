@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"; // Added watch
+import { ref, watch, onMounted } from "vue"; // Added watch and onMounted
 import CaptureAhHaModal from "./components/CaptureAhHaModal.vue";
+import MyAhHasView from "./components/MyAhHasView.vue"; // Import MyAhHasView for type reference
 
 // GM3 Components from linked gm3-vue library
 import {
@@ -16,6 +17,7 @@ const showCaptureModal = ref(false);
 const globalSearchTerm = ref(""); // For AppBar search
 const globalSearchValueFromAppBar = ref(""); // To receive search value if not using v-model
 const isNavRailExpanded = ref(false);
+const myAhHasViewRef = ref<InstanceType<typeof MyAhHasView> | null>(null);
 
 const toggleNavRail = () => {
   isNavRailExpanded.value = !isNavRailExpanded.value;
@@ -124,8 +126,18 @@ const handleSaveAhHa = async (ahHaData: {
 
     const savedAhHa = await response.json();
     console.log("Successfully saved Ah-ha:", savedAhHa);
-    // Optionally, you might want to refresh the MyAhHasView here
-    // or emit an event that MyAhHasView can listen to.
+
+    // Refresh MyAhHasView
+    if (myAhHasViewRef.value) {
+      console.log(
+        "[App.vue] Calling fetchAhHas on MyAhHasView instance after save."
+      );
+      myAhHasViewRef.value.fetchAhHas(true, "ahha_saved"); // Pass true to fetch all, and a trigger source
+    } else {
+      console.warn(
+        "[App.vue] myAhHasViewRef is not available to refresh the list."
+      );
+    }
   } catch (error) {
     console.error("Error saving Ah-ha:", error);
     alert(`Error saving Ah-ha: ${error}`);
@@ -206,7 +218,13 @@ const handleSaveAhHa = async (ahHaData: {
       </AppBar>
       <div class="router-view-content">
         <div class="router-view-inner-padding">
-          <router-view :global-search-query="globalSearchTerm" />
+          <router-view v-slot="{ Component }">
+            <component
+              :is="Component"
+              :global-search-query="globalSearchTerm"
+              ref="myAhHasViewRef"
+            />
+          </router-view>
           <!-- Pass globalSearchTerm to the view -->
           <!-- Vue Router will render the matched component here -->
         </div>
