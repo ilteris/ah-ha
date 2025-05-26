@@ -68,26 +68,49 @@ const closeCaptureModal = () => {
 };
 
 const handleSaveAhHa = async (ahHaData: {
-  title: string;
+  // title: string; // Title removed from input type
   tags: string[];
   snippet: string;
   context: string;
 }) => {
-  // console.log("Ah-ha to save:", ahHaData);
+  // console.log("Ah-ha to save (raw from modal):", ahHaData);
+  // console.log("Snippet content being sent to backend:", ahHaData.snippet);
+
+  // Generate title from snippet
+  let generatedTitle = ahHaData.snippet.trim().split("\n")[0]; // First line
+  if (generatedTitle.length > 100) {
+    // Max title length
+    generatedTitle = generatedTitle.substring(0, 100) + "...";
+  }
+  if (!generatedTitle && ahHaData.snippet.trim().length > 0) {
+    // Fallback if first line is empty but snippet has content
+    generatedTitle =
+      ahHaData.snippet.trim().substring(0, 100) +
+      (ahHaData.snippet.trim().length > 100 ? "..." : "");
+  }
+  if (!generatedTitle) {
+    generatedTitle = "Untitled Ah-ha"; // Default if snippet is empty (though modal validates this)
+  }
+
+  const payload = {
+    title: generatedTitle, // Use auto-generated title
+    generated_tags: ahHaData.tags,
+    content: ahHaData.snippet,
+    permalink_to_origin: ahHaData.context,
+    content_type: "markdown",
+  };
+  console.log(
+    "Payload being sent to backend (auto-titled):",
+    JSON.stringify(payload)
+  );
+
   try {
     const response = await fetch("http://localhost:8010/api/v1/snippets/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        title: ahHaData.title,
-        generated_tags: ahHaData.tags, // Align with backend model, will be overwritten by AI if enabled
-        content: ahHaData.snippet,
-        permalink_to_origin: ahHaData.context, // Align with backend model
-        // timestamp will be set by backend
-        // notes field is also available in backend if needed
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {

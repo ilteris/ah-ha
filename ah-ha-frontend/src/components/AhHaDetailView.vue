@@ -44,7 +44,7 @@
 import { ref, onMounted, watch, computed } from "vue";
 import { useRoute } from "vue-router";
 import { Chip } from "gm3-vue"; // Import Chip
-// import { marked } from "marked"; // No longer using marked for direct HTML
+import { marked } from "marked"; // Import marked
 import DOMPurify from "dompurify"; // Import DOMPurify
 
 interface AhHaDetail {
@@ -52,6 +52,7 @@ interface AhHaDetail {
   title: string;
   generated_tags: string[] | null;
   content: string;
+  content_type?: "html" | "text" | "markdown" | null; // Add content_type
   timestamp: string;
   permalink_to_origin?: string | null;
   original_context?: string | null;
@@ -78,6 +79,10 @@ const fetchAhHaDetail = async (id: string) => {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     item.value = await response.json();
+    console.log(
+      "Fetched item in AhHaDetailView:",
+      JSON.parse(JSON.stringify(item.value))
+    ); // Log fetched item
   } catch (e: any) {
     console.error("Failed to fetch Ah-ha detail:", e);
     error.value = e.message || "Failed to load Ah-ha detail.";
@@ -93,8 +98,24 @@ const formatTimestamp = (isoString: string | undefined) => {
 
 const parsedContent = computed(() => {
   if (item.value && item.value.content) {
-    // Sanitize HTML content before rendering
-    return DOMPurify.sanitize(item.value.content);
+    const content = item.value.content;
+    const contentType = item.value.content_type;
+
+    if (contentType === "markdown") {
+      // Parse markdown to HTML, then sanitize
+      const rawHtml = marked.parse(content) as string;
+      return DOMPurify.sanitize(rawHtml);
+    } else if (contentType === "html") {
+      // Sanitize HTML content directly
+      return DOMPurify.sanitize(content);
+    } else {
+      // For 'text' or undefined content_type, treat as plain text.
+      // Escape HTML entities to prevent rendering as HTML, then wrap in <pre> for formatting.
+      // DOMPurify will also handle this safely if we pass it through.
+      // For simplicity with v-html, we'll sanitize it.
+      // If true plain text display is needed, use {{ }} and style appropriately.
+      return DOMPurify.sanitize(content);
+    }
   }
   return "";
 });

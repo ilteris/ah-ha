@@ -1,82 +1,82 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click.self="closeModal">
-    <div class="capture-ah-ha-modal">
-      <h2>Capture Ah-ha Moment</h2>
-      <form @submit.prevent="handleSave">
-        <div class="form-group snippet-preview">
-          <label>Selected Snippet:</label>
-          <blockquote>{{ snippet }}</blockquote>
+  <Dialog
+    :visible="props.show"
+    title="Capture Ah-ha Moment"
+    @update:visible="handleDialogVisibilityChange"
+    persistent
+    max-width="600px"
+  >
+    <form @submit.prevent="handleSave" class="dialog-form-content">
+      <div class="form-group">
+        <label for="ah-ha-snippet">Snippet:</label>
+        <textarea
+          id="ah-ha-snippet"
+          v-model="editableSnippet"
+          rows="4"
+          placeholder="Enter your ah-ha moment details..."
+        ></textarea>
+      </div>
+      <div class="form-group suggested-tags-group" v-if="props.show">
+        <label>Suggested Tags:</label>
+        <div v-if="isLoadingSuggestions" class="loading-suggestions">
+          Loading suggestions...
         </div>
-        <div class="form-group">
-          <label for="ah-ha-title">Title (Required):</label>
-          <input
-            type="text"
-            id="ah-ha-title"
-            v-model="title"
-            required
-            ref="titleInput"
-          />
+        <div v-if="suggestionsError" class="suggestions-error">
+          {{ suggestionsError }}
         </div>
-        <div class="form-group">
-          <label for="ah-ha-tags">Tags (Comma-separated):</label>
-          <input
-            type="text"
-            id="ah-ha-tags"
-            v-model="tags"
-            placeholder="e.g., project-x, idea, important"
-          />
+        <div
+          v-if="
+            !isLoadingSuggestions &&
+            !suggestionsError &&
+            suggestedTags.length === 0 &&
+            editableSnippet
+          "
+          class="no-suggestions"
+        >
+          No suggestions found for the current snippet.
         </div>
-        <div class="form-group suggested-tags-group" v-if="props.show">
-          <label>Suggested Tags:</label>
-          <div v-if="isLoadingSuggestions" class="loading-suggestions">
-            Loading suggestions...
-          </div>
-          <div v-if="suggestionsError" class="suggestions-error">
-            {{ suggestionsError }}
-          </div>
-          <div
-            v-if="
-              !isLoadingSuggestions &&
-              !suggestionsError &&
-              suggestedTags.length === 0 &&
-              snippet
-            "
-            class="no-suggestions"
+        <div
+          class="suggested-tags-container"
+          v-if="
+            !isLoadingSuggestions &&
+            !suggestionsError &&
+            suggestedTags.length > 0
+          "
+        >
+          <button
+            type="button"
+            v-for="tag in suggestedTags"
+            :key="tag"
+            @click="addSuggestedTag(tag)"
+            class="suggested-tag-button"
           >
-            No suggestions found.
-          </div>
-          <div
-            class="suggested-tags-container"
-            v-if="
-              !isLoadingSuggestions &&
-              !suggestionsError &&
-              suggestedTags.length > 0
-            "
-          >
-            <button
-              type="button"
-              v-for="tag in suggestedTags"
-              :key="tag"
-              @click="addSuggestedTag(tag)"
-              class="suggested-tag-button"
-            >
-              {{ tag }}
-            </button>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="submit" class="button-save">Save Ah-ha</button>
-          <button type="button" @click="closeModal" class="button-cancel">
-            Cancel
+            {{ tag }}
           </button>
         </div>
-      </form>
-    </div>
-  </div>
+      </div>
+    </form>
+    <template #actions>
+      <button
+        type="button"
+        @click="closeModal"
+        class="button-cancel dialog-button"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        @click="handleSave"
+        class="button-save dialog-button"
+      >
+        Save Ah-ha
+      </button>
+    </template>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
+import { Dialog } from "gm3-vue"; // Import Dialog
 
 interface Props {
   show: boolean;
@@ -85,11 +85,11 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(["close", "save"]);
+const emit = defineEmits(["close", "save"]); // Removed "update:show" as App.vue controls 'show'
 
-const title = ref("");
-const tags = ref("");
-const titleInput = ref<HTMLInputElement | null>(null);
+const editableSnippet = ref("");
+const tags = ref(""); // This will store comma-separated tags selected by clicking suggestions
+// const titleInput = ref<HTMLInputElement | null>(null); // Removed titleInput
 
 const suggestedTags = ref<string[]>([]);
 const isLoadingSuggestions = ref(false);
@@ -129,14 +129,18 @@ watch(
   (newVal) => {
     if (newVal) {
       // Reset fields when modal opens
-      title.value = "";
+      editableSnippet.value = props.snippet; // Initialize editableSnippet
       tags.value = "";
-      // Focus the title input when modal becomes visible
+      // Focus the snippet textarea when modal becomes visible (or another primary input)
       nextTick(() => {
-        titleInput.value?.focus();
+        // If you want to focus the textarea:
+        const snippetTextarea = document.getElementById("ah-ha-snippet");
+        snippetTextarea?.focus();
+        // titleInput.value?.focus(); // Removed
       });
-      if (props.snippet) {
-        fetchTagSuggestions(props.snippet);
+      if (editableSnippet.value) {
+        // Use editableSnippet for suggestions
+        fetchTagSuggestions(editableSnippet.value);
       } else {
         suggestedTags.value = []; // Clear if no snippet
       }
@@ -149,13 +153,13 @@ watch(
   }
 );
 
-// Watch for snippet changes while modal is open
+// Watch for editableSnippet changes while modal is open for tag suggestions
 watch(
-  () => props.snippet,
-  (newSnippet) => {
-    if (props.show && newSnippet) {
-      fetchTagSuggestions(newSnippet);
-    } else if (props.show && !newSnippet) {
+  editableSnippet, // Watch the local editableSnippet ref
+  (newSnippetText) => {
+    if (props.show && newSnippetText) {
+      fetchTagSuggestions(newSnippetText);
+    } else if (props.show && !newSnippetText) {
       suggestedTags.value = [];
     }
   }
@@ -179,54 +183,46 @@ const closeModal = () => {
   emit("close");
 };
 
+const handleDialogVisibilityChange = (isVisible: boolean) => {
+  if (!isVisible) {
+    // This is called when Dialog wants to close (e.g. scrim click if not persistent, ESC key)
+    // We emit 'close' which App.vue listens to, to set its `showCaptureModal` to false.
+    // This in turn updates the :visible prop of the Dialog.
+    emit("close");
+  }
+};
+
 const handleSave = () => {
-  if (!title.value.trim()) {
-    alert("Title is required.");
+  // Title validation removed as it's auto-generated
+  if (!editableSnippet.value.trim()) {
+    alert("Snippet content cannot be empty.");
+    // Optionally focus the snippet textarea
+    const snippetTextarea = document.getElementById("ah-ha-snippet");
+    snippetTextarea?.focus();
     return;
   }
   emit("save", {
-    title: title.value.trim(),
+    // title: title.value.trim(), // Title removed from emitted data
     tags: tags.value
       .split(",")
       .map((tag) => tag.trim())
       .filter((tag) => tag !== ""),
-    snippet: props.snippet,
+    snippet: editableSnippet.value,
     context: props.context,
   });
-  closeModal();
+  // App.vue's handleSaveAhHa method is responsible for calling closeCaptureModal,
+  // which will set showCaptureModal to false, hiding the dialog.
+  // No direct call to closeModal() here.
 };
 </script>
 
 <style scoped lang="scss">
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
+/* Removed .modal-overlay and .capture-ah-ha-modal styles */
 
-.capture-ah-ha-modal {
-  background-color: #fff;
-  padding: 25px 30px;
-  border-radius: 10px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-  width: 90%;
-  max-width: 550px; // Slightly wider for suggestions
-  z-index: 1001;
-
-  h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-    color: #333;
-    font-size: 1.5em;
-    text-align: center;
-  }
+.dialog-form-content {
+  /* Add any specific padding or layout for the form inside the dialog if needed */
+  /* For example, if the gm3-vue Dialog doesn't provide enough padding for the content slot */
+  padding: 0 10px; /* Example: Add some horizontal padding to the form content */
 }
 
 .form-group {
@@ -239,13 +235,16 @@ const handleSave = () => {
     color: #555;
   }
 
-  input[type="text"] {
+  input[type="text"],
+  textarea {
+    // Apply similar styling to textarea
     width: 100%;
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 5px;
     box-sizing: border-box;
     font-size: 1em;
+    font-family: inherit; // Ensure textarea uses the same font
 
     &:focus {
       border-color: #007bff;
@@ -253,58 +252,54 @@ const handleSave = () => {
       box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
     }
   }
-}
 
-.snippet-preview {
-  label {
-    margin-bottom: 5px;
-  }
-  blockquote {
-    background-color: #f9f9f9;
-    border-left: 4px solid #eee;
-    margin: 0;
-    padding: 10px 15px;
-    font-style: italic;
-    color: #555;
-    max-height: 100px;
-    overflow-y: auto;
-    border-radius: 0 5px 5px 0;
+  textarea {
+    // Specific textarea styling if needed
+    min-height: 160px; // Give it some default height
+    resize: vertical; // Allow vertical resizing
   }
 }
 
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 25px;
+/* Styles for .modal-actions are no longer needed if using Dialog's #actions slot with gm3-vue buttons.
+   If using custom buttons in the slot, these styles might need to be adjusted or gm3 button classes used.
+   For now, assuming custom buttons as per the template.
+*/
+.dialog-button {
+  /* General styling for buttons in the #actions slot */
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease,
+    border-color 0.2s ease;
+}
 
-  button {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 1em;
-    font-weight: bold;
-    transition: background-color 0.2s ease;
-  }
+.button-save.dialog-button {
+  background-color: var(--md-sys-color-primary, #007bff);
+  color: var(--md-sys-color-on-primary, white);
+  border-color: var(--md-sys-color-primary, #007bff);
+}
 
-  .button-save {
-    background-color: #28a745;
-    color: white;
+.button-save.dialog-button:hover {
+  background-color: var(
+    --md-sys-color-primary-dark,
+    #0056b3
+  ); /* A slightly darker shade for hover */
+  border-color: var(--md-sys-color-primary-dark, #0056b3);
+}
 
-    &:hover {
-      background-color: #218838;
-    }
-  }
+.button-cancel.dialog-button {
+  background-color: transparent;
+  color: var(--md-sys-color-primary, #007bff);
+  border-color: var(
+    --md-sys-color-outline,
+    #6c757d
+  ); /* Use outline color for border */
+}
 
-  .button-cancel {
-    background-color: #6c757d;
-    color: white;
-
-    &:hover {
-      background-color: #5a6268;
-    }
-  }
+.button-cancel.dialog-button:hover {
+  background-color: var(
+    --md-sys-color-surface-container-highest,
+    #e0e0e0
+  ); /* Light background for hover */
+  color: var(--md-sys-color-primary-dark, #0056b3);
 }
 
 .suggested-tags-group {

@@ -109,6 +109,7 @@ interface AhHaItem {
   title: string;
   generated_tags: string[] | null; // Changed from 'tags' to 'generated_tags'
   content: string;
+  content_type?: "html" | "text" | "markdown" | null; // Add content_type
   timestamp: string; // Assuming ISO string from backend
   permalink_to_origin?: string | null; // Added permalink
   original_context?: string | null;
