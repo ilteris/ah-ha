@@ -166,103 +166,118 @@ async function handleContextMenuClick(info, tab) {
   const pageUrl = info.pageUrl || tab.url; // pageUrl is usually more reliable
 
   // Send message to content script to get selected HTML and text
-  chrome.tabs.sendMessage(tab.id, { type: "GET_SELECTED_HTML" }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error(
-        "Error getting selected HTML from content script:",
-        chrome.runtime.lastError.message
-      );
-      // Fallback or notify user
-      chrome.notifications.create({
-        type: "basic",
-        iconUrl: "icons/icon48.png",
-        title: "Ah-Ha! Capture Error",
-        message: "Could not get selected content from page.",
-      });
-      return;
-    }
-
-    if (!response || (!response.html && !response.text)) {
-      console.warn("No HTML or text content received from content script.");
-      // Optionally, notify the user via a desktop notification if no text selected
-      return;
-    }
-
-    const selectedHtml = response.html;
-    const selectedText = response.text; // Fallback for title or if HTML is empty
-
-    console.log(
-      `Selected HTML: "${
-        selectedHtml ? selectedHtml.substring(0, 100) + "..." : "N/A"
-      }" from URL: ${pageUrl}`
-    );
-    console.log(
-      `Selected Text: "${
-        selectedText ? selectedText.substring(0, 100) + "..." : "N/A"
-      }"`
-    );
-
-    // Instead of saving directly, open the capture UI
-    const captureUiUrl = chrome.runtime.getURL("capture_ui/capture.html");
-
-    // Prepare data to pass to the capture UI
-    const initialData = {
-      htmlContent: selectedHtml, // Pass HTML content
-      textContent: selectedText, // Pass plain text as well (for title, fallback)
-      sourceUrl: pageUrl,
-      title:
-        selectedText.substring(0, 70) + (selectedText.length > 70 ? "..." : ""), // Auto-generate initial title from plain text
-      // context: info.frameUrl || tab.url // Or more detailed context if needed
-    };
-
-    // Store data in local storage temporarily for the capture UI to fetch
-    const dataKey = `captureUiData_${Date.now()}`; // Unique key
-    chrome.storage.local.set({ [dataKey]: initialData }, () => {
+  const messageOptions = {};
+  if (info.frameId && info.frameId !== 0) {
+    messageOptions.frameId = info.frameId;
+  }
+  console.log(
+    `Sending GET_SELECTED_HTML to tab ${tab.id}, frameId: ${
+      messageOptions.frameId || "main (0)"
+    }`
+  );
+  chrome.tabs.sendMessage(
+    tab.id,
+    { type: "GET_SELECTED_HTML" },
+    messageOptions,
+    (response) => {
       if (chrome.runtime.lastError) {
         console.error(
-          "Error saving initialData to local storage:",
+          "Error getting selected HTML from content script:",
           chrome.runtime.lastError.message
         );
+        // Fallback or notify user
         chrome.notifications.create({
           type: "basic",
           iconUrl: "icons/icon48.png",
           title: "Ah-Ha! Capture Error",
-          message: "Could not prepare data for capture dialog.",
+          message: "Could not get selected content from page.",
         });
         return;
       }
 
-      const urlWithParams = `${captureUiUrl}?dataKey=${dataKey}`;
+      if (!response || (!response.html && !response.text)) {
+        console.warn("No HTML or text content received from content script.");
+        // Optionally, notify the user via a desktop notification if no text selected
+        return;
+      }
 
-      // Open a new window for the capture UI
-      chrome.windows.create(
-        {
-          url: urlWithParams,
-          type: "popup", // 'popup' or 'panel' are common for this
-          width: 450, // Adjust size as needed
-          height: 550, // Adjust size as needed
-          focused: true,
-        },
-        (window) => {
-          if (chrome.runtime.lastError) {
-            console.error(
-              "Error opening capture UI window:",
-              chrome.runtime.lastError.message
-            );
-            // Fallback or error notification if window creation fails
-            chrome.notifications.create({
-              type: "basic",
-              iconUrl: "icons/icon48.png",
-              title: "Ah-Ha! Capture Error",
-              message: "Could not open capture dialog.",
-            });
-          } else {
-            console.log("Capture UI window opened:", window.id);
-          }
-        }
+      const selectedHtml = response.html;
+      const selectedText = response.text; // Fallback for title or if HTML is empty
+
+      console.log(
+        `Selected HTML: "${
+          selectedHtml ? selectedHtml.substring(0, 100) + "..." : "N/A"
+        }" from URL: ${pageUrl}`
       );
-    }); // Close chrome.storage.local.set callback
-  }); // Close the sendMessage callback
+      console.log(
+        `Selected Text: "${
+          selectedText ? selectedText.substring(0, 100) + "..." : "N/A"
+        }"`
+      );
+
+      // Instead of saving directly, open the capture UI
+      const captureUiUrl = chrome.runtime.getURL("capture_ui/capture.html");
+
+      // Prepare data to pass to the capture UI
+      const initialData = {
+        htmlContent: selectedHtml, // Pass HTML content
+        textContent: selectedText, // Pass plain text as well (for title, fallback)
+        sourceUrl: pageUrl,
+        title:
+          selectedText.substring(0, 70) +
+          (selectedText.length > 70 ? "..." : ""), // Auto-generate initial title from plain text
+        // context: info.frameUrl || tab.url // Or more detailed context if needed
+      };
+
+      // Store data in local storage temporarily for the capture UI to fetch
+      const dataKey = `captureUiData_${Date.now()}`; // Unique key
+      chrome.storage.local.set({ [dataKey]: initialData }, () => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "Error saving initialData to local storage:",
+            chrome.runtime.lastError.message
+          );
+          chrome.notifications.create({
+            type: "basic",
+            iconUrl: "icons/icon48.png",
+            title: "Ah-Ha! Capture Error",
+            message: "Could not prepare data for capture dialog.",
+          });
+          return;
+        }
+
+        const urlWithParams = `${captureUiUrl}?dataKey=${dataKey}`;
+
+        // Open a new window for the capture UI
+        chrome.windows.create(
+          {
+            url: urlWithParams,
+            type: "popup", // 'popup' or 'panel' are common for this
+            width: 450, // Adjust size as needed
+            height: 550, // Adjust size as needed
+            focused: true,
+          },
+          (window) => {
+            if (chrome.runtime.lastError) {
+              console.error(
+                "Error opening capture UI window:",
+                chrome.runtime.lastError.message
+              );
+              // Fallback or error notification if window creation fails
+              chrome.notifications.create({
+                type: "basic",
+                iconUrl: "icons/icon48.png",
+                title: "Ah-Ha! Capture Error",
+                message: "Could not open capture dialog.",
+              });
+            } else {
+              console.log("Capture UI window opened:", window.id);
+            }
+          }
+        );
+      }); // Close chrome.storage.local.set callback
+    }
+  ); // Close the sendMessage callback
 }
 
 // Function to check authentication status (checks for a stored token)
