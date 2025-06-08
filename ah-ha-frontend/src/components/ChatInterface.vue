@@ -37,7 +37,9 @@ const selectedContext = ref<string>(""); // To store the full message text of th
 const fetchChatLog = async () => {
   try {
     // Assuming backend is running on port 8010
-    const response = await fetch("http://localhost:8010/mock-chat/");
+    const response = await fetch(
+      "https://aha-backend-service-36070612387.us-central1.run.app/mock-chat/"
+    );
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

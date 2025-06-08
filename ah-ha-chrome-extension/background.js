@@ -1,7 +1,8 @@
 // Ah-Ha! Capture - background.js (Service Worker)
 
 // --- Globals ---
-const AH_HA_API_BASE_URL = "http://localhost:8010/api/v1"; // Replace with your actual backend API URL
+const AH_HA_API_BASE_URL =
+  "https://aha-backend-service-36070612387.us-central1.run.app/api/v1"; // Replace with your actual backend API URL
 const CONTEXT_MENU_ID = "AH_HA_CAPTURE_CONTEXT_MENU";
 
 let currentAuthToken = null;
@@ -161,11 +162,21 @@ async function handleContextMenuClick(info, tab) {
   }
   console.log("Context menu clicked:", info);
   console.log("Tab information:", tab);
+  // Log the selectionText from the context menu info
+  if (info.selectionText) {
+    console.log(
+      "info.selectionText from context menu:",
+      info.selectionText.substring(0, 100) + "..."
+    );
+  } else {
+    console.log(
+      "info.selectionText from context menu: Not available or empty."
+    );
+  }
 
-  // const selectionText = info.selectionText; // We'll get this from content script
   const pageUrl = info.pageUrl || tab.url; // pageUrl is usually more reliable
 
-  // Send message to content script to get selected HTML and text
+  // Send message to content script to get selected HTML (and text as a fallback)
   const messageOptions = {};
   if (info.frameId && info.frameId !== 0) {
     messageOptions.frameId = info.frameId;
@@ -175,34 +186,119 @@ async function handleContextMenuClick(info, tab) {
       messageOptions.frameId || "main (0)"
     }`
   );
-  chrome.tabs.sendMessage(
+  // Roo: Helper function to send message with retries
+  function sendMessageWithRetries(
+    tabId,
+    message,
+    options,
+    callback,
+    retries = 3,
+    delay = 100
+  ) {
+    chrome.tabs.sendMessage(tabId, message, options, (response) => {
+      if (chrome.runtime.lastError) {
+        if (
+          retries > 0 &&
+          chrome.runtime.lastError.message.includes(
+            "Could not establish connection"
+          )
+        ) {
+          console.warn(
+            `Retrying sendMessage to tab ${tabId}, ${retries} retries left. Error: ${chrome.runtime.lastError.message}`
+          );
+          setTimeout(() => {
+            sendMessageWithRetries(
+              tabId,
+              message,
+              options,
+              callback,
+              retries - 1,
+              delay
+            );
+          }, delay);
+        } else {
+          console.error(
+            "Error getting selected HTML from content script (final attempt or other error):",
+            chrome.runtime.lastError.message
+          );
+          // Fallback or notify user
+          chrome.notifications.create({
+            type: "basic",
+            iconUrl: "icons/icon48.png",
+            title: "Ah-Ha! Capture Error",
+            message:
+              "Could not get selected content from page. Please try again after the page has fully loaded.",
+          });
+          if (callback) callback(null); // Ensure callback is called with null on error
+        }
+        return; // Important: return after handling error or scheduling retry
+      }
+      if (callback) callback(response);
+    });
+  }
+
+  sendMessageWithRetries(
     tab.id,
     { type: "GET_SELECTED_HTML" },
     messageOptions,
     (response) => {
-      if (chrome.runtime.lastError) {
-        console.error(
-          "Error getting selected HTML from content script:",
-          chrome.runtime.lastError.message
+      // The error handling for chrome.runtime.lastError is now inside sendMessageWithRetries
+      // We only proceed if response is not null (meaning no final error occurred)
+      if (!response && chrome.runtime.lastError) {
+        // Check if error was handled and callback got null
+        // Notification already sent by sendMessageWithRetries
+        return;
+      }
+
+      if (!response && !chrome.runtime.lastError) {
+        // This case might happen if content script sends null/undefined without error
+        console.warn(
+          "Received null/undefined response from content script without a runtime error."
         );
-        // Fallback or notify user
+        // Potentially notify or handle as no selection
         chrome.notifications.create({
           type: "basic",
           iconUrl: "icons/icon48.png",
-          title: "Ah-Ha! Capture Error",
-          message: "Could not get selected content from page.",
+          title: "Ah-Ha! Capture Info",
+          message:
+            "No specific content was selected or retrieved from the page.",
         });
         return;
       }
 
-      if (!response || (!response.html && !response.text)) {
-        console.warn("No HTML or text content received from content script.");
-        // Optionally, notify the user via a desktop notification if no text selected
-        return;
+      // Prioritize info.selectionText, then fall back to response.text
+      let selectedText = "";
+      if (info.selectionText && info.selectionText.trim() !== "") {
+        selectedText = info.selectionText.trim();
+        console.log("Using info.selectionText as primary selected text.");
+      } else if (response && response.text && response.text.trim() !== "") {
+        selectedText = response.text.trim();
+        console.log(
+          "Using response.text from content script as selected text."
+        );
+      } else {
+        console.warn(
+          "No usable text found from info.selectionText or content script response."
+        );
+        // If there's no text at all, we might still want the HTML if available,
+        // or decide to return if text is essential.
+        // For now, let's proceed if HTML is there, or if text was truly empty.
       }
 
-      const selectedHtml = response.html;
-      const selectedText = response.text; // Fallback for title or if HTML is empty
+      const selectedHtml = response ? response.html : "";
+
+      // Check if we have anything to proceed with
+      if (!selectedHtml && !selectedText) {
+        console.warn("No HTML or text content available to capture.");
+        // Optionally, notify the user
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icons/icon48.png",
+          title: "Ah-Ha! Capture",
+          message: "No content selected or found to capture.",
+        });
+        return;
+      }
 
       console.log(
         `Selected HTML: "${
@@ -420,7 +516,9 @@ function initiateOAuthFlow(sendResponseToPopup) {
         redirectUrl.substring(redirectUrl.indexOf("#") + 1)
       );
       const accessToken = params.get("access_token");
+      console.log("OAuth Access Token:", accessToken); // Roo: Log the access token
       const idToken = params.get("id_token"); // This is the JWT we need to parse for the nonce
+      console.log("OAuth ID Token:", idToken); // Roo: Log the ID token
       const expiresIn = params.get("expires_in");
 
       // Retrieve the stored nonce
@@ -567,6 +665,10 @@ function initiateOAuthFlow(sendResponseToPopup) {
             });
           } else {
             currentAuthToken = accessToken;
+            console.log(
+              "Setting currentAuthToken in memory:",
+              currentAuthToken
+            ); // Roo: Log when setting in-memory token
             currentUserLoggedIn = true;
             console.log(
               "SUCCESS: chrome.storage.local.set completed. In-memory state updated. currentAuthToken set, currentUserLoggedIn=true. Tokens should be in storage."

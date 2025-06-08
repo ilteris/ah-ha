@@ -1,0 +1,135 @@
+[
+  {
+    "sessionId": 1748393130,
+    "messageId": 0,
+    "type": "user",
+    "message": "hello",
+    "timestamp": "2025-05-28T01:03:58.691Z"
+  },
+  {
+    "sessionId": 1748393130,
+    "messageId": 1,
+    "type": "user",
+    "message": "can you connect to mpc",
+    "timestamp": "2025-05-28T01:04:20.048Z"
+  },
+  {
+    "sessionId": 1748393130,
+    "messageId": 2,
+    "type": "user",
+    "message": "no model context protocol servers",
+    "timestamp": "2025-05-28T01:04:40.600Z"
+  },
+  {
+    "sessionId": 1748393130,
+    "messageId": 3,
+    "type": "user",
+    "message": "can you go through my project and summarize it for me",
+    "timestamp": "2025-05-28T01:05:10.498Z"
+  },
+  {
+    "sessionId": 1748393130,
+    "messageId": 4,
+    "type": "user",
+    "message": "draw me a flow chart",
+    "timestamp": "2025-05-28T01:05:37.857Z"
+  },
+  {
+    "sessionId": 1748393130,
+    "messageId": 5,
+    "type": "user",
+    "message": "1",
+    "timestamp": "2025-05-28T01:05:48.398Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 0,
+    "type": "user",
+    "message": ":q",
+    "timestamp": "2025-05-29T14:02:13.970Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 1,
+    "type": "user",
+    "message": "/theme",
+    "timestamp": "2025-05-29T14:09:34.683Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 2,
+    "type": "user",
+    "message": "/help",
+    "timestamp": "2025-05-29T14:11:25.442Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 3,
+    "type": "user",
+    "message": "gcloud",
+    "timestamp": "2025-05-29T14:11:47.712Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 4,
+    "type": "user",
+    "message": "yeah run it",
+    "timestamp": "2025-05-29T14:11:58.191Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 5,
+    "type": "user",
+    "message": "exit",
+    "timestamp": "2025-05-29T14:13:55.628Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 6,
+    "type": "user",
+    "message": "draw me a flow chart",
+    "timestamp": "2025-05-29T14:14:11.440Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 7,
+    "type": "user",
+    "message": "what system can you do as an example",
+    "timestamp": "2025-05-29T14:14:27.240Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 8,
+    "type": "user",
+    "message": "yes do a git workflow",
+    "timestamp": "2025-05-29T14:14:38.397Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 9,
+    "type": "user",
+    "message": "sequential thinking",
+    "timestamp": "2025-05-29T14:17:34.084Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 10,
+    "type": "user",
+    "message": "exit",
+    "timestamp": "2025-05-29T14:18:01.946Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 11,
+    "type": "user",
+    "message": "can you connect to mcp",
+    "timestamp": "2025-05-29T14:18:13.204Z"
+  },
+  {
+    "sessionId": 1748527109,
+    "messageId": 12,
+    "type": "user",
+    "message": "help me undertstand your capabilities",
+    "timestamp": "2025-05-29T14:18:57.921Z"
+  }
+]

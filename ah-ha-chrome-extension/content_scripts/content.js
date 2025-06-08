@@ -19,22 +19,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Indicate async response
   } else if (request.type === "GET_SELECTED_HTML") {
     const selection = window.getSelection();
+    let responsePayload;
     if (selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
       const div = document.createElement("div");
       div.appendChild(range.cloneContents());
-      sendResponse({
+      responsePayload = {
         html: div.innerHTML,
         text: selection.toString(),
         url: window.location.href,
-      });
+      };
+      // console.log( // Intentionally keeping this commented for potential future quick debug
+      //   "Content script sending selected HTML:",
+      //   responsePayload.html.substring(0, 100) + "...",
+      //   "Text:",
+      //   responsePayload.text.substring(0, 100) + "..."
+      // );
     } else {
-      sendResponse({
+      responsePayload = {
         html: "",
         text: "",
         url: window.location.href,
-      });
+      };
+      // console.log( // Intentionally keeping this commented
+      //   "Content script: No selection found or rangeCount is 0. Sending empty html/text."
+      // );
     }
+    sendResponse(responsePayload);
     return true; // Important for async response
   }
   // For other synchronous messages, you might not need to return true.

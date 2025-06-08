@@ -26,14 +26,11 @@ API_ACCESS_TOKEN_EXPIRE_MINUTES = int(
 API_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("API_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # CORS Configuration
-ORIGINS = [
-    "http://localhost",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
-    # Add any other origins if your frontend runs on a different port/domain
-]
+_CORS_ORIGINS_STR = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175",
+)
+ORIGINS = [origin.strip() for origin in _CORS_ORIGINS_STR.split(",") if origin.strip()]
 
 # Stop words list (can be expanded) - Moving here as it's a static configuration
 STOP_WORDS = set(

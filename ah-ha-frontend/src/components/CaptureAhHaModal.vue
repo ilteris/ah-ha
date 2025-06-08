@@ -103,13 +103,16 @@ const fetchTagSuggestions = async (snippetText: string) => {
   isLoadingSuggestions.value = true;
   suggestionsError.value = null;
   try {
-    const response = await fetch("http://localhost:8010/suggest-tags/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ snippet: snippetText }),
-    });
+    const response = await fetch(
+      "https://aha-backend-service-36070612387.us-central1.run.app/suggest-tags/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ snippet: snippetText }),
+      }
+    );
     if (!response.ok) {
       throw new Error("Failed to fetch tag suggestions");
     }

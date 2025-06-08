@@ -168,7 +168,8 @@ const fetchAhHas = async (
   }
   isLoading.value = true;
   error.value = null;
-  let url = "http://localhost:8010/ah-has/";
+  let url =
+    "https://aha-backend-service-36070612387.us-central1.run.app/ah-has/";
   if (!fetchAll && searchTerm.value.trim() !== "") {
     url += `?search=${encodeURIComponent(searchTerm.value.trim())}`;
   }
@@ -317,7 +318,7 @@ const deleteAhHa = async (id: string | null | undefined) => {
   error.value = null;
   try {
     const response = await fetch(
-      `http://localhost:8010/api/v1/snippets/${id}`,
+      `https://aha-backend-service-36070612387.us-central1.run.app/api/v1/snippets/${id}`,
       {
         method: "DELETE",
       }

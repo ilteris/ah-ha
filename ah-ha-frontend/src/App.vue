@@ -107,13 +107,16 @@ const handleSaveAhHa = async (ahHaData: {
   );
 
   try {
-    const response = await fetch("http://localhost:8010/api/v1/snippets/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    const response = await fetch(
+      "https://aha-backend-service-36070612387.us-central1.run.app/api/v1/snippets/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }
+    );
 
     if (!response.ok) {
       const errorData = await response.json();

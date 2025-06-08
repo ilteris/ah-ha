@@ -71,7 +71,9 @@ const fetchAhHaDetail = async (id: string) => {
   item.value = null;
   try {
     // Adjust the API endpoint as needed
-    const response = await fetch(`http://localhost:8010/ah-has/${id}/`);
+    const response = await fetch(
+      `https://aha-backend-service-36070612387.us-central1.run.app/ah-has/${id}/`
+    );
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error("Ah-ha moment not found.");

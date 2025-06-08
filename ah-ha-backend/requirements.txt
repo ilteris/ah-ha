@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+gunicorn
 pydantic
 google-generativeai # Allowing latest version to align with genai.Client() usage
 python-dotenv
