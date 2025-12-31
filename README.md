@@ -22,12 +22,12 @@ The project consists of three main components:
 
 ```mermaid
 graph TD
-    User[User] -->|Interacts| Ext[Chrome Extension]
-    User -->|Views/Manages| FE[Frontend (Vue.js)]
-    Ext -->|Sends Snippet| BE[Backend API (FastAPI)]
+    User[User] -->|Interacts| Ext["Chrome Extension"]
+    User -->|Views/Manages| FE["Frontend (Vue.js)"]
+    Ext -->|Sends Snippet| BE["Backend API (FastAPI)"]
     FE -->|Fetches Snippets| BE
-    BE -->|Stores Data| DB[(Google Firestore)]
-    BE -->|Generates Tags| AI[Google Vertex AI / Gemini]
+    BE -->|Stores Data| DB[("Google Firestore")]
+    BE -->|Generates Tags| AI["Google Vertex AI / Gemini"]
 ```
 
 ## 🛠️ Prerequisites
